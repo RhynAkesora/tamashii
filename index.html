@@ -2,28 +2,20 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>魂テトリス</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: Arial, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #gameContainer { position: relative; }
-        canvas { border: 1px solid #000; }
-        #score { position: absolute; top: 10px; left: 10px; font-size: 20px; color: white; text-shadow: 1px 1px 2px black; }
-        #instructions { position: absolute; bottom: 10px; left: 10px; font-size: 14px; color: white; text-shadow: 1px 1px 2px black; }
-        #comboDisplay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; color: white; text-shadow: 2px 2px 4px black; display: none; }
+        body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: Arial, sans-serif; overflow: hidden; }
+        #gameContainer { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        canvas { border: 1px solid #000; max-width: 100%; max-height: 70vh; }
+        #score { position: absolute; top: 10px; left: 10px; font-size: 16px; color: white; text-shadow: 1px 1px 2px black; }
+        #comboDisplay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 30px; color: white; text-shadow: 2px 2px 4px black; display: none; }
     </style>
 </head>
 <body>
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
         <div id="score">スコア: 0 コンボ: 0</div>
-        <div id="instructions">
-            操作方法:<br>
-            ← →: 移動<br>
-            ↑: 回転<br>
-            ↓: 落下速度上昇<br>
-            スペース: 開始/リトライ
-        </div>
         <div id="comboDisplay"></div>
     </div>
     <script>
@@ -33,6 +25,7 @@
         const comboDisplayElement = document.getElementById('comboDisplay');
         const gridWidth = 10;
         const gridHeight = 20;
+        const cellDivisions = 5;
         let cellSize;
         let sandSize;
         let sandParticles = [];
@@ -44,26 +37,32 @@
         let isClearing = false;
         let comboCount = 0;
         let isComboOngoing = false;
-        let gameState = 'start'; // 'start', 'playing', 'gameOver'
+        let gameState = 'start';
         let comboDisplayTimeout;
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        let isTouchHolding = false;
 
-        const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];  // 赤、青、緑、黄
+        const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
 
         const pieces = [
-            [[1,1,1,1]],           // I
-            [[1,1],[1,1]],         // O
-            [[1,1,1],[0,1,0]],     // T
-            [[1,1,1],[1,0,0]],     // L
-            [[1,1,1],[0,0,1]],     // J
-            [[1,1,0],[0,1,1]],     // S
-            [[0,1,1],[1,1,0]]      // Z
+            [[1,1,1,1]],
+            [[1,1],[1,1]],
+            [[1,1,1],[0,1,0]],
+            [[1,1,1],[1,0,0]],
+            [[1,1,1],[0,0,1]],
+            [[1,1,0],[0,1,1]],
+            [[0,1,1],[1,1,0]]
         ];
 
         function resizeCanvas() {
-            const maxWidth = window.innerWidth * 0.4;
-            const maxHeight = window.innerHeight * 0.8;
+            const containerWidth = document.getElementById('gameContainer').clientWidth;
+            const containerHeight = document.getElementById('gameContainer').clientHeight;
+            const maxWidth = containerWidth * 0.9;
+            const maxHeight = containerHeight * 0.7;
             cellSize = Math.floor(Math.min(maxWidth / gridWidth, maxHeight / gridHeight));
-            sandSize = cellSize / 5;
+            sandSize = cellSize / cellDivisions;
             canvas.width = cellSize * gridWidth;
             canvas.height = cellSize * gridHeight;
         }
@@ -107,7 +106,7 @@
                         const newX = currentPiece.x + x + dx;
                         const newY = currentPiece.y + y + dy;
                         if (newX < 0 || newX >= gridWidth || newY >= gridHeight || 
-                            sandParticles.some(p => Math.floor(p.x / 5) === newX && Math.floor(p.y / 5) === newY)) {
+                            sandParticles.some(p => Math.floor(p.x / cellDivisions) === newX && Math.floor(p.y / cellDivisions) === newY)) {
                             return false;
                         }
                     }
@@ -131,11 +130,11 @@
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
-                        for (let i = 0; i < 5; i++) {
-                            for (let j = 0; j < 5; j++) {
+                        for (let i = 0; i < cellDivisions; i++) {
+                            for (let j = 0; j < cellDivisions; j++) {
                                 sandParticles.push({
-                                    x: (currentPiece.x + x) * 5 + i,
-                                    y: (currentPiece.y + y) * 5 + j,
+                                    x: (currentPiece.x + x) * cellDivisions + i,
+                                    y: (currentPiece.y + y) * cellDivisions + j,
                                     color: currentPiece.color
                                 });
                             }
@@ -199,14 +198,14 @@
         }
 
         function isFullWidth(component) {
-            let minX = gridWidth * 5;
+            let minX = gridWidth * cellDivisions;
             let maxX = 0;
             for (let key of component) {
                 const [x, _] = key.split(',').map(Number);
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x);
             }
-            return maxX - minX + 1 === gridWidth * 5;
+            return maxX - minX + 1 === gridWidth * cellDivisions;
         }
 
         function removeSandParticles(component) {
@@ -217,15 +216,21 @@
             let moved = false;
             sandParticles.sort((a, b) => b.y - a.y);
             for (let particle of sandParticles) {
-                if (particle.y < gridHeight * 5 - 1 && !sandParticles.some(p => p.x === particle.x && p.y === particle.y + 1)) {
+                if (particle.y < gridHeight * cellDivisions - 1 && !sandParticles.some(p => p.x === particle.x && p.y === particle.y + 1)) {
                     particle.y++;
                     moved = true;
-                } else if (particle.y < gridHeight * 5 - 1) {
-                    if (particle.x > 0 && !sandParticles.some(p => p.x === particle.x - 1 && p.y === particle.y + 1)) {
+                } else if (particle.y < gridHeight * cellDivisions - 1) {
+                    const leftClear = particle.x > 0 && !sandParticles.some(p => p.x === particle.x - 1 && p.y === particle.y + 1);
+                    const rightClear = particle.x < gridWidth * cellDivisions - 1 && !sandParticles.some(p => p.x === particle.x + 1 && p.y === particle.y + 1);
+                    if (leftClear && rightClear) {
+                        particle.x += Math.random() < 0.5 ? -1 : 1;
+                        particle.y++;
+                        moved = true;
+                    } else if (leftClear) {
                         particle.x--;
                         particle.y++;
                         moved = true;
-                    } else if (particle.x < gridWidth * 5 - 1 && !sandParticles.some(p => p.x === particle.x + 1 && p.y === particle.y + 1)) {
+                    } else if (rightClear) {
                         particle.x++;
                         particle.y++;
                         moved = true;
@@ -249,7 +254,7 @@
             ctx.textAlign = 'center';
             ctx.fillText('魂テトリス', canvas.width / 2, canvas.height / 2 - 40);
             ctx.font = '20px Arial';
-            ctx.fillText('スペースキーで開始', canvas.width / 2, canvas.height / 2 + 20);
+            ctx.fillText('タップして開始', canvas.width / 2, canvas.height / 2 + 20);
         }
 
         function drawGameOverScreen() {
@@ -261,7 +266,7 @@
             ctx.fillText('ゲームオーバー', canvas.width / 2, canvas.height / 2 - 40);
             ctx.font = '20px Arial';
             ctx.fillText(`最終スコア: ${score}`, canvas.width / 2, canvas.height / 2);
-            ctx.fillText('スペースキーでリトライ', canvas.width / 2, canvas.height / 2 + 40);
+            ctx.fillText('タップしてリトライ', canvas.width / 2, canvas.height / 2 + 40);
         }
 
         function resetGame() {
@@ -345,30 +350,66 @@
             gameLoop = requestAnimationFrame(update);
         }
 
-        document.addEventListener('keydown', (event) => {
-            if (event.code === 'Space') {
-                if (gameState === 'start' || gameState === 'gameOver') {
-                    resetGame();
-                    return;
-                }
-            }
-
+        function handleTouch(action) {
             if (gameState !== 'playing') return;
 
-            switch (event.code) {
-                case 'ArrowLeft':
+            switch (action) {
+                case 'left':
                     if (canMove(-1, 0)) currentPiece.x--;
                     break;
-                case 'ArrowRight':
+                case 'right':
                     if (canMove(1, 0)) currentPiece.x++;
                     break;
-                case 'ArrowDown':
-                    if (canMove(0, 1)) currentPiece.y++;
-                    break;
-                case 'ArrowUp':
+                case 'rotate':
                     rotate();
                     break;
+                case 'drop':
+                    while (canMove(0, 1)) {
+                        currentPiece.y++;
+                    }
+                    mergePiece();
+                    break;
             }
+        }
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            touchStartTime = Date.now();
+            isTouchHolding = true;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (gameState !== 'playing') return;
+
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = touch.clientY - touchStartY;
+
+            if (Math.abs(deltaX) > cellSize) {
+                handleTouch(deltaX > 0 ? 'right' : 'left');
+                touchStartX = touch.clientX;
+            }
+
+            if (deltaY > cellSize && isTouchHolding) {
+                handleTouch('drop');
+                isTouchHolding = false;
+            }
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            const touchEndTime = Date.now();
+            const touchDuration = touchEndTime - touchStartTime;
+
+            if (touchDuration < 200 && isTouchHolding) {
+                handleTouch('rotate');
+            }
+
+            isTouchHolding = false;
         });
 
         window.addEventListener('resize', () => {
@@ -382,6 +423,18 @@
 
         resizeCanvas();
         drawStartScreen();
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' && (gameState === 'start' || gameState === 'gameOver')) {
+                resetGame();
+            }
+        });
+
+        canvas.addEventListener('touchstart', () => {
+            if (gameState === 'start' || gameState === 'gameOver') {
+                resetGame();
+            }
+        });
     </script>
 </body>
 </html>
