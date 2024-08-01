@@ -340,7 +340,7 @@
                             gameOver();
                             return;
                         }
-}
+                    }
                 }
             }
 
@@ -372,6 +372,13 @@
                     }
                     mergePiece();
                     break;
+            }
+        }
+
+        function handleCanvasClick(e) {
+            e.preventDefault();
+            if (gameState === 'start' || gameState === 'gameOver') {
+                resetGame();
             }
         }
 
@@ -416,6 +423,9 @@
                 isTouchHolding = false;
             });
 
+            canvas.addEventListener('click', handleCanvasClick);
+            canvas.addEventListener('touchend', handleCanvasClick);
+
             window.addEventListener('resize', () => {
                 resizeCanvas();
                 if (gameState === 'start') {
@@ -442,12 +452,6 @@
                             break;
                     }
                 } else if (event.code === 'Space' && (gameState === 'start' || gameState === 'gameOver')) {
-                    resetGame();
-                }
-            });
-
-            canvas.addEventListener('click', () => {
-                if (gameState === 'start' || gameState === 'gameOver') {
                     resetGame();
                 }
             });
