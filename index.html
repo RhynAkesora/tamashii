@@ -26,8 +26,18 @@
         const gridWidth = 10;
         const gridHeight = 20;
         const cellDivisions = 5;
-        let cellSize;
-        let sandSize;
+        const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
+        const pieces = [
+            [[1,1,1,1]],
+            [[1,1],[1,1]],
+            [[1,1,1],[0,1,0]],
+            [[1,1,1],[1,0,0]],
+            [[1,1,1],[0,0,1]],
+            [[1,1,0],[0,1,1]],
+            [[0,1,1],[1,1,0]]
+        ];
+
+        let cellSize, sandSize;
         let sandParticles = [];
         let currentPiece;
         let score = 0;
@@ -44,18 +54,6 @@
         let touchStartY = 0;
         let touchStartTime = 0;
         let isTouchHolding = false;
-
-        const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
-
-        const pieces = [
-            [[1,1,1,1]],
-            [[1,1],[1,1]],
-            [[1,1,1],[0,1,0]],
-            [[1,1,1],[1,0,0]],
-            [[1,1,1],[0,0,1]],
-            [[1,1,0],[0,1,1]],
-            [[0,1,1],[1,1,0]]
-        ];
 
         function resizeCanvas() {
             const containerWidth = document.getElementById('gameContainer').clientWidth;
@@ -81,7 +79,7 @@
 
         function drawGrid() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (let particle of sandParticles) {
+            for (const particle of sandParticles) {
                 ctx.fillStyle = colors[particle.color];
                 ctx.fillRect(particle.x * sandSize, particle.y * sandSize, sandSize, sandSize);
             }
@@ -151,8 +149,8 @@
             let cleared = false;
             let clearedLines = 0;
             for (let color = 0; color < colors.length; color++) {
-                let connectedComponents = findConnectedComponents(color);
-                for (let component of connectedComponents) {
+                const connectedComponents = findConnectedComponents(color);
+                for (const component of connectedComponents) {
                     if (isFullWidth(component)) {
                         removeSandParticles(component);
                         cleared = true;
@@ -176,11 +174,11 @@
         }
 
         function findConnectedComponents(color) {
-            let visited = new Set();
-            let components = [];
-            for (let particle of sandParticles) {
+            const visited = new Set();
+            const components = [];
+            for (const particle of sandParticles) {
                 if (particle.color === color && !visited.has(`${particle.x},${particle.y}`)) {
-                    let component = new Set();
+                    const component = new Set();
                     dfs(particle, color, visited, component);
                     components.push(component);
                 }
@@ -195,7 +193,7 @@
             component.add(key);
 
             const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-            for (let [dx, dy] of directions) {
+            for (const [dx, dy] of directions) {
                 const newX = particle.x + dx;
                 const newY = particle.y + dy;
                 const neighbor = sandParticles.find(p => p.x === newX && p.y === newY && p.color === color);
@@ -208,7 +206,7 @@
         function isFullWidth(component) {
             let minX = gridWidth * cellDivisions;
             let maxX = 0;
-            for (let key of component) {
+            for (const key of component) {
                 const [x, _] = key.split(',').map(Number);
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x);
@@ -223,7 +221,7 @@
         function simulateSand() {
             let moved = false;
             sandParticles.sort((a, b) => b.y - a.y);
-            for (let particle of sandParticles) {
+            for (const particle of sandParticles) {
                 if (particle.y < gridHeight * cellDivisions - 1 && !sandParticles.some(p => p.x === particle.x && p.y === particle.y + 1)) {
                     particle.y++;
                     moved = true;
@@ -249,7 +247,7 @@
         }
 
         function calculateComboScore(combo, lines) {
-            let baseScore = lines * 100;
+            const baseScore = lines * 100;
             let multiplier = 1;
             for (let i = 2; i <= combo; i++) {
                 multiplier *= 1.5;
@@ -331,7 +329,7 @@
             }
 
             if (isClearing) {
-                let cleared = checkAndClearLines();
+                const cleared = checkAndClearLines();
                 if (cleared) {
                     isSettling = true;
                 } else {
@@ -342,7 +340,7 @@
                             gameOver();
                             return;
                         }
-                    }
+}
                 }
             }
 
@@ -377,69 +375,91 @@
             }
         }
 
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-            touchStartTime = Date.now();
-            isTouchHolding = true;
-        });
-
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (gameState !== 'playing') return;
-
-            const touch = e.touches[0];
-            const deltaX = touch.clientX - touchStartX;
-            const deltaY = touch.clientY - touchStartY;
-
-            if (Math.abs(deltaX) > cellSize) {
-                handleTouch(deltaX > 0 ? 'right' : 'left');
+        function initEventListeners() {
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
                 touchStartX = touch.clientX;
-            }
+                touchStartY = touch.clientY;
+                touchStartTime = Date.now();
+                isTouchHolding = true;
+            });
 
-            if (deltaY > cellSize && isTouchHolding) {
-                handleTouch('drop');
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (gameState !== 'playing') return;
+
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - touchStartX;
+                const deltaY = touch.clientY - touchStartY;
+
+                if (Math.abs(deltaX) > cellSize) {
+                    handleTouch(deltaX > 0 ? 'right' : 'left');
+                    touchStartX = touch.clientX;
+                }
+
+                if (deltaY > cellSize && isTouchHolding) {
+                    handleTouch('drop');
+                    isTouchHolding = false;
+                }
+            });
+
+            canvas.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                const touchEndTime = Date.now();
+                const touchDuration = touchEndTime - touchStartTime;
+
+                if (touchDuration < 200 && isTouchHolding) {
+                    handleTouch('rotate');
+                }
+
                 isTouchHolding = false;
-            }
-        });
+            });
 
-        canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            const touchEndTime = Date.now();
-            const touchDuration = touchEndTime - touchStartTime;
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                if (gameState === 'start') {
+                    drawStartScreen();
+                } else if (gameState === 'gameOver') {
+                    drawGameOverScreen();
+                }
+            });
 
-            if (touchDuration < 200 && isTouchHolding) {
-                handleTouch('rotate');
-            }
+            document.addEventListener('keydown', (event) => {
+                if (gameState === 'playing') {
+                    switch (event.code) {
+                        case 'ArrowLeft':
+                            handleTouch('left');
+                            break;
+                        case 'ArrowRight':
+                            handleTouch('right');
+                            break;
+                        case 'ArrowUp':
+                            handleTouch('rotate');
+                            break;
+                        case 'ArrowDown':
+                            handleTouch('drop');
+                            break;
+                    }
+                } else if (event.code === 'Space' && (gameState === 'start' || gameState === 'gameOver')) {
+                    resetGame();
+                }
+            });
 
-            isTouchHolding = false;
-        });
+            canvas.addEventListener('click', () => {
+                if (gameState === 'start' || gameState === 'gameOver') {
+                    resetGame();
+                }
+            });
+        }
 
-        window.addEventListener('resize', () => {
+        function init() {
             resizeCanvas();
-            if (gameState === 'start') {
-                drawStartScreen();
-            } else if (gameState === 'gameOver') {
-                drawGameOverScreen();
-            }
-        });
+            initEventListeners();
+            drawStartScreen();
+        }
 
-        resizeCanvas();
-        drawStartScreen();
-
-        document.addEventListener('keydown', (event) => {
-            if (event.code === 'Space' && (gameState === 'start' || gameState === 'gameOver')) {
-                resetGame();
-            }
-        });
-
-        canvas.addEventListener('touchstart', () => {
-            if (gameState === 'start' || gameState === 'gameOver') {
-                resetGame();
-            }
-        });
+        init();
     </script>
 </body>
 </html>
