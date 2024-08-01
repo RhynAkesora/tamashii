@@ -8,14 +8,14 @@
         body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: Arial, sans-serif; overflow: hidden; }
         #gameContainer { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         canvas { border: 1px solid #000; max-width: 100%; max-height: 70vh; }
-        #score { position: absolute; top: 10px; left: 10px; font-size: 16px; color: white; text-shadow: 1px 1px 2px black; }
+        #score { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); font-size: 16px; color: black; }
         #comboDisplay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 30px; color: white; text-shadow: 2px 2px 4px black; display: none; }
     </style>
 </head>
 <body>
     <div id="gameContainer">
+        <div id="score">スコア: 0 最高コンボ: 0</div>
         <canvas id="gameCanvas"></canvas>
-        <div id="score">スコア: 0 コンボ: 0</div>
         <div id="comboDisplay"></div>
     </div>
     <script>
@@ -36,6 +36,7 @@
         let isSettling = false;
         let isClearing = false;
         let comboCount = 0;
+        let maxCombo = 0;
         let isComboOngoing = false;
         let gameState = 'start';
         let comboDisplayTimeout;
@@ -148,21 +149,28 @@
 
         function checkAndClearLines() {
             let cleared = false;
+            let clearedLines = 0;
             for (let color = 0; color < colors.length; color++) {
                 let connectedComponents = findConnectedComponents(color);
                 for (let component of connectedComponents) {
                     if (isFullWidth(component)) {
                         removeSandParticles(component);
                         cleared = true;
+                        clearedLines++;
                     }
                 }
             }
             if (cleared) {
                 comboCount++;
-                score += calculateComboScore(comboCount);
+                maxCombo = Math.max(maxCombo, comboCount);
+                score += calculateComboScore(comboCount, clearedLines);
                 if (comboCount >= 2) {
                     showComboDisplay(comboCount);
                 }
+                isComboOngoing = true;
+            } else if (isComboOngoing) {
+                comboCount = 0;
+                isComboOngoing = false;
             }
             return cleared;
         }
@@ -240,6 +248,25 @@
             return moved;
         }
 
+        function calculateComboScore(combo, lines) {
+            let baseScore = lines * 100;
+            let multiplier = 1;
+            for (let i = 2; i <= combo; i++) {
+                multiplier *= 1.5;
+            }
+            return Math.floor(baseScore * multiplier);
+        }
+
+        function showComboDisplay(combo) {
+            if (combo < 2) return;
+            comboDisplayElement.textContent = `${combo} コンボ!`;
+            comboDisplayElement.style.display = 'block';
+            clearTimeout(comboDisplayTimeout);
+            comboDisplayTimeout = setTimeout(() => {
+                comboDisplayElement.style.display = 'none';
+            }, 2000);
+        }
+
         function gameOver() {
             gameState = 'gameOver';
             cancelAnimationFrame(gameLoop);
@@ -273,32 +300,15 @@
             sandParticles = [];
             score = 0;
             comboCount = 0;
+            maxCombo = 0;
             isComboOngoing = false;
             isSettling = false;
             isClearing = false;
             frameCount = 0;
             currentPiece = createPiece();
-            scoreElement.textContent = `スコア: ${score} コンボ: ${comboCount}`;
+            scoreElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}`;
             gameState = 'playing';
             update();
-        }
-
-        function calculateComboScore(combo) {
-            let multiplier = 1;
-            for (let i = 2; i <= combo; i++) {
-                multiplier *= 1.5;
-            }
-            return Math.floor(100 * multiplier);
-        }
-
-        function showComboDisplay(combo) {
-            if (combo < 2) return;
-            comboDisplayElement.textContent = `${combo} コンボ!`;
-            comboDisplayElement.style.display = 'block';
-            clearTimeout(comboDisplayTimeout);
-            comboDisplayTimeout = setTimeout(() => {
-                comboDisplayElement.style.display = 'none';
-            }, 2000);
         }
 
         function update() {
@@ -324,13 +334,8 @@
                 let cleared = checkAndClearLines();
                 if (cleared) {
                     isSettling = true;
-                    isComboOngoing = true;
                 } else {
                     isClearing = false;
-                    if (isComboOngoing) {
-                        isComboOngoing = false;
-                        comboCount = 0;
-                    }
                     if (!currentPiece) {
                         currentPiece = createPiece();
                         if (!canMove(0, 0)) {
@@ -346,7 +351,7 @@
                 drawPiece();
             }
 
-            scoreElement.textContent = `スコア: ${score} コンボ: ${comboCount}`;
+            scoreElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}`;
             gameLoop = requestAnimationFrame(update);
         }
 
