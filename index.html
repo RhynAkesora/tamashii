@@ -159,13 +159,19 @@
                 }
             }
             if (cleared) {
-                comboCount++;
-                maxCombo = Math.max(maxCombo, comboCount);
-                score += calculateComboScore(comboCount, clearedLines);
-                if (comboCount >= 2) {
-                    showComboDisplay(comboCount);
+                if (isComboOngoing) {
+                    comboCount++;
+                } else {
+                    comboCount = 1;
                 }
-                isComboOngoing = true;
+                if (comboCount >= 2) {
+                    maxCombo = Math.max(maxCombo, comboCount);
+                    score += calculateComboScore(comboCount, clearedLines);
+                    showComboDisplay(comboCount);
+                    isComboOngoing = true;
+                } else {
+                    score += clearedLines * 100; // 通常のスコア計算（コンボなし）
+                }
             } else if (isComboOngoing) {
                 comboCount = 0;
                 isComboOngoing = false;
