@@ -8,20 +8,20 @@
         body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: Arial, sans-serif; overflow: hidden; }
         #gameContainer { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         canvas { border: 1px solid #000; max-width: 100%; max-height: 70vh; }
-        #score { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); font-size: 16px; color: black; }
+        #scoreDisplay { position: absolute; top: 10px; left: 10px; font-size: 16px; color: white; text-shadow: 1px 1px 2px black; }
         #comboDisplay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 30px; color: white; text-shadow: 2px 2px 4px black; display: none; }
     </style>
 </head>
 <body>
     <div id="gameContainer">
-        <div id="score">スコア: 0 最高コンボ: 0</div>
+        <div id="scoreDisplay">スコア: 0 最高コンボ: 0</div>
         <canvas id="gameCanvas"></canvas>
         <div id="comboDisplay"></div>
     </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const scoreElement = document.getElementById('score');
+        const scoreDisplayElement = document.getElementById('scoreDisplay');
         const comboDisplayElement = document.getElementById('comboDisplay');
         const gridWidth = 10;
         const gridHeight = 20;
@@ -47,13 +47,14 @@
         let isClearing = false;
         let comboCount = 0;
         let maxCombo = 0;
-        let isComboOngoing = false;
         let gameState = 'start';
         let comboDisplayTimeout;
         let touchStartX = 0;
         let touchStartY = 0;
         let touchStartTime = 0;
         let isTouchHolding = false;
+        let isComboOngoing = false;
+        let hasCleared = false;
 
         function resizeCanvas() {
             const containerWidth = document.getElementById('gameContainer').clientWidth;
@@ -67,6 +68,11 @@
         }
 
         function createPiece() {
+            if (!hasCleared) {
+                isComboOngoing = false;
+                comboCount = 0;
+            }
+            hasCleared = false;
             const pieceType = Math.floor(Math.random() * pieces.length);
             const colorIndex = Math.floor(Math.random() * colors.length);
             return {
@@ -159,22 +165,16 @@
                 }
             }
             if (cleared) {
-                if (isComboOngoing) {
-                    comboCount++;
-                } else {
+                hasCleared = true;
+                if (!isComboOngoing) {
                     comboCount = 1;
-                }
-                if (comboCount >= 2) {
-                    maxCombo = Math.max(maxCombo, comboCount);
-                    score += calculateComboScore(comboCount, clearedLines);
-                    showComboDisplay(comboCount);
                     isComboOngoing = true;
                 } else {
-                    score += clearedLines * 100; // 通常のスコア計算（コンボなし）
+                    comboCount++;
                 }
-            } else if (isComboOngoing) {
-                comboCount = 0;
-                isComboOngoing = false;
+                score += calculateComboScore(comboCount, clearedLines);
+                showComboDisplay(comboCount);
+                maxCombo = Math.max(maxCombo, comboCount);
             }
             return cleared;
         }
@@ -254,10 +254,7 @@
 
         function calculateComboScore(combo, lines) {
             const baseScore = lines * 100;
-            let multiplier = 1;
-            for (let i = 2; i <= combo; i++) {
-                multiplier *= 1.5;
-            }
+            let multiplier = 1 + (combo - 1) * 0.5;
             return Math.floor(baseScore * multiplier);
         }
 
@@ -269,6 +266,10 @@
             comboDisplayTimeout = setTimeout(() => {
                 comboDisplayElement.style.display = 'none';
             }, 2000);
+        }
+
+        function updateScoreDisplay() {
+            scoreDisplayElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}`;
         }
 
         function gameOver() {
@@ -305,12 +306,13 @@
             score = 0;
             comboCount = 0;
             maxCombo = 0;
-            isComboOngoing = false;
             isSettling = false;
             isClearing = false;
+            isComboOngoing = false;
+            hasCleared = false;
             frameCount = 0;
             currentPiece = createPiece();
-            scoreElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}`;
+            updateScoreDisplay();
             gameState = 'playing';
             update();
         }
@@ -319,11 +321,12 @@
             if (gameState !== 'playing') return;
 
             frameCount++;
-            if (frameCount % 30 === 0 && !isSettling && !isClearing) {
+            if (frameCount % 30 === 0 && !isSettling && !isClearing && currentPiece) {
                 if (canMove(0, 1)) {
                     currentPiece.y++;
                 } else {
                     mergePiece();
+                    isSettling = true;
                 }
             }
 
@@ -355,7 +358,7 @@
                 drawPiece();
             }
 
-            scoreElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}`;
+            updateScoreDisplay();
             gameLoop = requestAnimationFrame(update);
         }
 
