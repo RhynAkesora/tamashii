@@ -2,19 +2,65 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>魂テトリス</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: Arial, sans-serif; overflow: hidden; }
-        #gameContainer { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        canvas { border: 1px solid #000; max-width: 100%; max-height: 70vh; }
-        #scoreDisplay { position: absolute; top: 10px; left: 10px; font-size: 16px; color: white; text-shadow: 1px 1px 2px black; }
-        #comboDisplay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 30px; color: white; text-shadow: 2px 2px 4px black; display: none; }
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            position: fixed;
+        }
+        body { 
+            background-color: #f0f0f0; 
+            font-family: Arial, sans-serif; 
+        }
+        #gameContainer { 
+            position: absolute; 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: flex-start;
+            align-items: center; 
+        }
+        canvas { 
+            border: 1px solid #000; 
+            max-width: 100%; 
+            max-height: calc(100% - 30px); 
+        }
+        #scoreDisplay {
+            width: 100%;
+            height: 30px;
+            font-size: 14px;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            line-height: 30px;
+            background-color: rgba(0, 0, 0, 0.5);
+            text-align: center;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+        }
+        #comboDisplay { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            font-size: 24px;
+            color: white; 
+            text-shadow: 2px 2px 4px black; 
+            display: none; 
+            z-index: 20;
+        }
     </style>
 </head>
 <body>
     <div id="gameContainer">
-        <div id="scoreDisplay">スコア: 0 最高コンボ: 0</div>
+        <div id="scoreDisplay">スコア: 0 最高コンボ: 0 速度: 1.00x</div>
         <canvas id="gameCanvas"></canvas>
         <div id="comboDisplay"></div>
     </div>
@@ -36,10 +82,16 @@
             [[1,1,0],[0,1,1]],
             [[0,1,1],[1,1,0]]
         ];
+        const NEXT_PIECE_PADDING = 10;
+        const NEXT_PIECE_LABEL = 'NEXT';
+        const SPEED_INCREASE_RATE = 0.99;
+        const SPEED_INCREASE_INTERVAL = 5;
+        const comboTimeThreshold = 1000;
 
         let cellSize, sandSize;
         let sandParticles = [];
         let currentPiece;
+        let nextPiece;
         let score = 0;
         let gameLoop;
         let frameCount = 0;
@@ -53,26 +105,39 @@
         let touchStartY = 0;
         let touchStartTime = 0;
         let isTouchHolding = false;
-        let isComboOngoing = false;
-        let hasCleared = false;
+        let lastClearedTime = 0;
+        let fallSpeed = 30;
+        let totalRows = 0;
 
         function resizeCanvas() {
-            const containerWidth = document.getElementById('gameContainer').clientWidth;
-            const containerHeight = document.getElementById('gameContainer').clientHeight;
-            const maxWidth = containerWidth * 0.9;
-            const maxHeight = containerHeight * 0.7;
-            cellSize = Math.floor(Math.min(maxWidth / gridWidth, maxHeight / gridHeight));
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight - 30;
+            const nextPieceWidth = Math.ceil(gridWidth * 0.4);
+            const aspectRatio = (gridWidth + nextPieceWidth) / gridHeight;
+            let newWidth, newHeight;
+
+            if (containerWidth / containerHeight > aspectRatio) {
+                newHeight = containerHeight;
+                newWidth = newHeight * aspectRatio;
+            } else {
+                newWidth = containerWidth;
+                newHeight = newWidth / aspectRatio;
+            }
+
+            cellSize = Math.floor(Math.min(newWidth / (gridWidth + nextPieceWidth), newHeight / gridHeight));
             sandSize = cellSize / cellDivisions;
-            canvas.width = cellSize * gridWidth;
+            canvas.width = cellSize * (gridWidth + nextPieceWidth);
             canvas.height = cellSize * gridHeight;
+
+            canvas.style.width = `${canvas.width}px`;
+            canvas.style.height = `${canvas.height}px`;
+
+            canvas.style.position = 'absolute';
+            canvas.style.left = `${(containerWidth - canvas.width) / 2}px`;
+            canvas.style.top = `${((containerHeight - canvas.height) / 2) + 30}px`;
         }
 
         function createPiece() {
-            if (!hasCleared) {
-                isComboOngoing = false;
-                comboCount = 0;
-            }
-            hasCleared = false;
             const pieceType = Math.floor(Math.random() * pieces.length);
             const colorIndex = Math.floor(Math.random() * colors.length);
             return {
@@ -85,6 +150,10 @@
 
         function drawGrid() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
+
             for (const particle of sandParticles) {
                 ctx.fillStyle = colors[particle.color];
                 ctx.fillRect(particle.x * sandSize, particle.y * sandSize, sandSize, sandSize);
@@ -98,6 +167,45 @@
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
                         ctx.fillRect((currentPiece.x + x) * cellSize, (currentPiece.y + y) * cellSize, cellSize - 1, cellSize - 1);
+                    }
+                }
+            }
+        }
+
+        function drawNextPiece() {
+            const nextPieceAreaWidth = canvas.width - cellSize * gridWidth;
+            const nextPieceSize = Math.min(cellSize * 0.8, (nextPieceAreaWidth - NEXT_PIECE_PADDING * 2) / 4);
+            const nextPieceX = cellSize * gridWidth + (nextPieceAreaWidth - nextPieceSize * 4) / 2;
+            const nextPieceY = NEXT_PIECE_PADDING * 2 + 20;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(cellSize * gridWidth, 0, nextPieceAreaWidth, canvas.height);
+
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cellSize * gridWidth, 0);
+            ctx.lineTo(cellSize * gridWidth, canvas.height);
+            ctx.stroke();
+
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(NEXT_PIECE_LABEL, cellSize * gridWidth + nextPieceAreaWidth / 2, NEXT_PIECE_PADDING + 20);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fillRect(nextPieceX, nextPieceY, nextPieceSize * 4, nextPieceSize * 4);
+
+            ctx.fillStyle = colors[nextPiece.color];
+            for (let y = 0; y < nextPiece.shape.length; y++) {
+                for (let x = 0; x < nextPiece.shape[y].length; x++) {
+                    if (nextPiece.shape[y][x]) {
+                        ctx.fillRect(
+                            nextPieceX + (x + (4 - nextPiece.shape[y].length) / 2) * nextPieceSize,
+                            nextPieceY + (y + (4 - nextPiece.shape.length) / 2) * nextPieceSize,
+                            nextPieceSize - 1,
+                            nextPieceSize - 1
+                        );
                     }
                 }
             }
@@ -151,34 +259,6 @@
             isSettling = true;
         }
 
-        function checkAndClearLines() {
-            let cleared = false;
-            let clearedLines = 0;
-            for (let color = 0; color < colors.length; color++) {
-                const connectedComponents = findConnectedComponents(color);
-                for (const component of connectedComponents) {
-                    if (isFullWidth(component)) {
-                        removeSandParticles(component);
-                        cleared = true;
-                        clearedLines++;
-                    }
-                }
-            }
-            if (cleared) {
-                hasCleared = true;
-                if (!isComboOngoing) {
-                    comboCount = 1;
-                    isComboOngoing = true;
-                } else {
-                    comboCount++;
-                }
-                score += calculateComboScore(comboCount, clearedLines);
-                showComboDisplay(comboCount);
-                maxCombo = Math.max(maxCombo, comboCount);
-            }
-            return cleared;
-        }
-
         function findConnectedComponents(color) {
             const visited = new Set();
             const components = [];
@@ -224,6 +304,56 @@
             sandParticles = sandParticles.filter(p => !component.has(`${p.x},${p.y}`));
         }
 
+        function calculateComboScore(combo, lines) {
+            const baseScore = lines * 100;
+            const baseMultiplier = 1.5;
+            let multiplier = Math.pow(baseMultiplier, combo - 1);
+            return Math.floor(baseScore * multiplier);
+        }
+
+        function showComboDisplay(combo) {
+            if (combo < 2) return;
+            const multiplier = Math.pow(1.5, combo - 1).toFixed(2);
+            comboDisplayElement.textContent = `${combo} コンボ! (x${multiplier})`;
+            comboDisplayElement.style.display = 'block';
+            clearTimeout(comboDisplayTimeout);
+            comboDisplayTimeout = setTimeout(() => {
+                comboDisplayElement.style.display = 'none';
+            }, 2000);
+        }
+
+        function checkAndClearLines() {
+            let cleared = false;
+            let clearedLines = 0;
+            for (let color = 0; color < colors.length; color++) {
+                const connectedComponents = findConnectedComponents(color);
+                for (const component of connectedComponents) {
+                    if (isFullWidth(component)) {
+                        removeSandParticles(component);
+                        cleared = true;
+                        clearedLines++;
+                    }
+                }
+            }
+            
+            const currentTime = Date.now();
+            if (cleared) {
+                if (currentTime - lastClearedTime < comboTimeThreshold) {
+                    comboCount++;
+                } else {
+                    comboCount = 1;
+                }
+                lastClearedTime = currentTime;
+                
+                const comboScore = calculateComboScore(comboCount, clearedLines);
+                score += comboScore;
+                showComboDisplay(comboCount);
+                maxCombo = Math.max(maxCombo, comboCount);
+            }
+            
+            return cleared;
+        }
+
         function simulateSand() {
             let moved = false;
             sandParticles.sort((a, b) => b.y - a.y);
@@ -252,24 +382,8 @@
             return moved;
         }
 
-        function calculateComboScore(combo, lines) {
-            const baseScore = lines * 100;
-            let multiplier = 1 + (combo - 1) * 0.5;
-            return Math.floor(baseScore * multiplier);
-        }
-
-        function showComboDisplay(combo) {
-            if (combo < 2) return;
-            comboDisplayElement.textContent = `${combo} コンボ!`;
-            comboDisplayElement.style.display = 'block';
-            clearTimeout(comboDisplayTimeout);
-            comboDisplayTimeout = setTimeout(() => {
-                comboDisplayElement.style.display = 'none';
-            }, 2000);
-        }
-
         function updateScoreDisplay() {
-            scoreDisplayElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}`;
+            scoreDisplayElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}x 速度: ${(30 / fallSpeed).toFixed(2)}x`;
         }
 
         function gameOver() {
@@ -308,10 +422,12 @@
             maxCombo = 0;
             isSettling = false;
             isClearing = false;
-            isComboOngoing = false;
-            hasCleared = false;
             frameCount = 0;
+            lastClearedTime = 0;
             currentPiece = createPiece();
+            nextPiece = createPiece();
+            fallSpeed = 30;
+            totalRows = 0;
             updateScoreDisplay();
             gameState = 'playing';
             update();
@@ -321,9 +437,14 @@
             if (gameState !== 'playing') return;
 
             frameCount++;
-            if (frameCount % 30 === 0 && !isSettling && !isClearing && currentPiece) {
+            if (frameCount % Math.floor(fallSpeed) === 0 && !isSettling && !isClearing && currentPiece) {
                 if (canMove(0, 1)) {
                     currentPiece.y++;
+                    score++;
+                    totalRows++;
+                    if (totalRows % SPEED_INCREASE_INTERVAL === 0) {
+                        fallSpeed *= SPEED_INCREASE_RATE;
+                    }
                 } else {
                     mergePiece();
                     isSettling = true;
@@ -344,7 +465,8 @@
                 } else {
                     isClearing = false;
                     if (!currentPiece) {
-                        currentPiece = createPiece();
+                        currentPiece = nextPiece;
+                        nextPiece = createPiece();
                         if (!canMove(0, 0)) {
                             gameOver();
                             return;
@@ -357,6 +479,7 @@
             if (currentPiece && !isSettling && !isClearing) {
                 drawPiece();
             }
+            drawNextPiece();
 
             updateScoreDisplay();
             gameLoop = requestAnimationFrame(update);
@@ -378,6 +501,8 @@
                 case 'drop':
                     while (canMove(0, 1)) {
                         currentPiece.y++;
+                        score++;
+                        totalRows++;
                     }
                     mergePiece();
                     break;
