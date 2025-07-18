@@ -508,9 +508,15 @@
             // ヨガ行者のドット絵を描画
             drawYogaMonk();
 
+            // 画面サイズに応じてフォントサイズを調整
+            const isSmallScreen = canvas.height < 600;
+            const titleFontSize = isSmallScreen ? 24 : 32;
+            const subtitleFontSize = isSmallScreen ? 14 : 16;
+            const instructionFontSize = isSmallScreen ? 16 : 18;
+
             // タイトルテキスト
             ctx.fillStyle = 'white';
-            ctx.font = 'bold 32px Arial';
+            ctx.font = `bold ${titleFontSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.strokeStyle = 'black';
             ctx.lineWidth = 2;
@@ -518,17 +524,18 @@
             ctx.fillText('魂テトリス', canvas.width / 2, canvas.height * 0.15);
 
             // サブタイトル
-            ctx.font = '16px Arial';
+            ctx.font = `${subtitleFontSize}px Arial`;
             ctx.fillStyle = '#cccccc';
             ctx.fillText('~ Soul Tetris ~', canvas.width / 2, canvas.height * 0.22);
 
-            // ゲーム開始の説明
-            ctx.font = '18px Arial';
-            ctx.fillStyle = 'white';
-            ctx.fillText('画面をタップしてゲーム開始', canvas.width / 2, canvas.height * 0.85);
-
             // ハイスコアボタン
             drawHighScoreButton();
+
+            // ゲーム開始の説明（ボタンの下に配置）
+            ctx.font = `${instructionFontSize}px Arial`;
+            ctx.fillStyle = 'white';
+            const instructionY = isSmallScreen ? canvas.height * 0.88 : canvas.height * 0.85;
+            ctx.fillText('画面をタップしてゲーム開始', canvas.width / 2, instructionY);
         }
 
         /**
@@ -601,10 +608,11 @@
          * ハイスコアボタンを描画する
          */
         function drawHighScoreButton() {
-            const buttonWidth = canvas.width * 0.3;
-            const buttonHeight = 40;
+            const isSmallScreen = canvas.height < 600;
+            const buttonWidth = Math.min(canvas.width * 0.3, 200);
+            const buttonHeight = isSmallScreen ? 35 : 40;
             const buttonX = canvas.width / 2 - buttonWidth / 2;
-            const buttonY = canvas.height * 0.75;
+            const buttonY = canvas.height * (isSmallScreen ? 0.70 : 0.75);
 
             // ボタンの背景
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
@@ -617,9 +625,9 @@
 
             // ボタンテキスト
             ctx.fillStyle = 'white';
-            ctx.font = '18px Arial';
+            ctx.font = `${isSmallScreen ? 16 : 18}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillText('ハイスコア', canvas.width / 2, buttonY + 25);
+            ctx.fillText('ハイスコア', canvas.width / 2, buttonY + (buttonHeight / 2) + 5);
         }
 
         /**
@@ -650,10 +658,11 @@
          * ハイスコアボタンがタップされたかチェックする
          */
         function isHighScoreButtonTapped(x, y) {
-            const buttonWidth = canvas.width * 0.3;
-            const buttonHeight = 40;
+            const isSmallScreen = canvas.height < 600;
+            const buttonWidth = Math.min(canvas.width * 0.3, 200);
+            const buttonHeight = isSmallScreen ? 35 : 40;
             const buttonX = canvas.width / 2 - buttonWidth / 2;
-            const buttonY = canvas.height * 0.75;
+            const buttonY = canvas.height * (isSmallScreen ? 0.70 : 0.75);
             
             return x >= buttonX && x <= buttonX + buttonWidth && 
                    y >= buttonY && y <= buttonY + buttonHeight;
