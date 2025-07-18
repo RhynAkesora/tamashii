@@ -208,10 +208,10 @@
             // 砂漠の背景を描画 (for the right side 'NEXT' area)
             drawDesertBackground();
             
-            // ゲームエリアの背景を白で描画
+            // ゲームエリアの背景を水色で描画
             const gameAreaWidth = cellSize * gridWidth;
             const gameAreaHeight = canvas.height;
-            ctx.fillStyle = 'white';
+            ctx.fillStyle = '#add8e6'; // Light Blue
             ctx.fillRect(0, 0, gameAreaWidth, gameAreaHeight);
 
             // 砂粒子を描画
