@@ -128,7 +128,7 @@
         let isClearing = false;
         let comboCount = 0;
         let maxCombo = 0;
-        let gameState = 'title';
+        let gameState = 'pleaseTap';
         let comboDisplayTimeout;
         let touchStartX = 0;
         let touchStartY = 0;
@@ -140,6 +140,8 @@
         let yogaImage = null;
         let bgmAudio = null;
         let gameoverBgmAudio = null;
+        let titleBgmAudio = null;
+        let pleaseTapAnimation = null;
 
         /**
          * キャンバスサイズを画面に合わせてリサイズする
@@ -640,8 +642,48 @@
         }
 
         /**
-         * タイトル画面を描画する
+         * Please Tap画面のアニメーションループ
          */
+        function animatePleaseTapScreen() {
+            if (gameState === 'pleaseTap') {
+                drawPleaseTapScreen();
+                pleaseTapAnimation = requestAnimationFrame(animatePleaseTapScreen);
+            }
+        }
+        function drawPleaseTapScreen() {
+            // 黒い背景
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 点滅効果の計算（1秒周期）
+            const time = Date.now();
+            const blinkCycle = (time % 1000) / 1000; // 0から1の範囲
+            const opacity = 0.3 + 0.7 * Math.abs(Math.sin(blinkCycle * Math.PI)); // 0.3から1.0の範囲で点滅
+            
+            // 画面サイズに応じてフォントサイズを調整
+            const isSmallScreen = canvas.height < 600;
+            const pleaseTapFontSize = isSmallScreen ? 28 : 36;
+            const pwaNoteFontSize = isSmallScreen ? 11 : 13;
+            const creditFontSize = isSmallScreen ? 12 : 14;
+            
+            // Please Tapテキスト（点滅）
+            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.font = `bold ${pleaseTapFontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('Please Tap', canvas.width / 2, canvas.height / 2 - 20);
+            
+            // PWA案内（中央下）
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.font = `${pwaNoteFontSize}px Arial`;
+            const pwaY = canvas.height / 2 + 60;
+            ctx.fillText('※ホーム画面に追加でこのゲームをアプリ化', canvas.width / 2, pwaY);
+            
+            // クレジット表記（画面下部）
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.font = `${creditFontSize}px Arial`;
+            const creditY = canvas.height - (isSmallScreen ? 20 : 30);
+            ctx.fillText('Presented by Rhyn皇太子', canvas.width / 2, creditY);
+        }
         function drawTitleScreen() {
             ctx.fillStyle = 'linear-gradient(180deg, #2c5aa0 0%, #5b3a8f 50%, #1a1a2e 100%)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -714,7 +756,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 0.53', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 0.55', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -766,8 +808,28 @@
         }
 
         /**
-         * 音声ファイルをアンロックする（ブラウザの自動再生ポリシー対策）
+         * タイトル用BGMを読み込む
          */
+        function loadTitleBGM() {
+            try {
+                titleBgmAudio = new Audio('soul-title.mp3');
+                titleBgmAudio.loop = true; // リピート再生を有効化
+                titleBgmAudio.volume = 0.7; // 音量を少し下げる
+                titleBgmAudio.preload = 'auto';
+                
+                titleBgmAudio.addEventListener('canplaythrough', () => {
+                    console.log('タイトルBGMの読み込み完了');
+                });
+                
+                titleBgmAudio.addEventListener('error', (e) => {
+                    console.error('タイトルBGMの読み込みに失敗しました:', e);
+                    titleBgmAudio = null;
+                });
+            } catch (error) {
+                console.error('タイトルBGMの初期化に失敗しました:', error);
+                titleBgmAudio = null;
+            }
+        }
         function unlockAudioFiles() {
             // ゲーム中BGMをアンロック
             if (bgmAudio) {
@@ -1045,16 +1107,12 @@
             updateScoreDisplay();
             gameState = 'playing';
             
-            // 確実にゲームオーバーBGMを停止
+            // 全てのBGMを停止
+            stopTitleBGM();
             stopGameOverBGM();
             
-            // 音声ファイルをアンロック（初回ゲーム開始時）
-            unlockAudioFiles();
-            
-            // 少し待ってからゲーム中BGMを再生開始
-            setTimeout(() => {
-                playBGM();
-            }, 200);
+            // ゲーム用BGMを再生開始
+            playBGM();
             
             update();
         }
@@ -1157,7 +1215,20 @@
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
-            if (gameState === 'title') {
+            if (gameState === 'pleaseTap') {
+                // 点滅アニメーションを停止
+                if (pleaseTapAnimation) {
+                    cancelAnimationFrame(pleaseTapAnimation);
+                    pleaseTapAnimation = null;
+                }
+                // 音声ファイルをアンロックしてタイトル画面へ
+                unlockAudioFiles();
+                gameState = 'title';
+                setTimeout(() => {
+                    playTitleBGM();
+                    drawTitleScreen();
+                }, 300);
+            } else if (gameState === 'title') {
                 if (isHighScoreButtonTapped(x, y)) {
                     gameState = 'highscore';
                     drawHighScoreScreen();
@@ -1166,13 +1237,12 @@
                 }
             } else if (gameState === 'highscore') {
                 gameState = 'title';
-                stopBGM(); // ゲーム中BGMを停止
-                stopGameOverBGM(); // ゲームオーバーBGMを停止
+                playTitleBGM();
                 drawTitleScreen();
             } else if (gameState === 'gameOver') {
                 gameState = 'title';
-                stopBGM(); // ゲーム中BGMを停止
-                stopGameOverBGM(); // ゲームオーバーBGMを停止
+                stopGameOverBGM();
+                playTitleBGM();
                 drawTitleScreen();
             }
         }
@@ -1225,13 +1295,26 @@
 
                     isTouchHolding = false;
                 } else {
-                    // タイトル画面、ハイスコア画面、ゲームオーバー画面での処理
+                    // タイトル画面、ハイスコア画面、ゲームオーバー画面、Please Tap画面での処理
                     const touch = e.changedTouches[0];
                     const rect = canvas.getBoundingClientRect();
                     const x = touch.clientX - rect.left;
                     const y = touch.clientY - rect.top;
 
-                    if (gameState === 'title') {
+                    if (gameState === 'pleaseTap') {
+                        // 点滅アニメーションを停止
+                        if (pleaseTapAnimation) {
+                            cancelAnimationFrame(pleaseTapAnimation);
+                            pleaseTapAnimation = null;
+                        }
+                        // 音声ファイルをアンロックしてタイトル画面へ
+                        unlockAudioFiles();
+                        gameState = 'title';
+                        setTimeout(() => {
+                            playTitleBGM();
+                            drawTitleScreen();
+                        }, 300);
+                    } else if (gameState === 'title') {
                         if (isHighScoreButtonTapped(x, y)) {
                             gameState = 'highscore';
                             drawHighScoreScreen();
@@ -1240,13 +1323,12 @@
                         }
                     } else if (gameState === 'highscore') {
                         gameState = 'title';
-                        stopBGM(); // ゲーム中BGMを停止
-                        stopGameOverBGM(); // ゲームオーバーBGMを停止
+                        playTitleBGM();
                         drawTitleScreen();
                     } else if (gameState === 'gameOver') {
                         gameState = 'title';
-                        stopBGM(); // ゲーム中BGMを停止
-                        stopGameOverBGM(); // ゲームオーバーBGMを停止
+                        stopGameOverBGM();
+                        playTitleBGM();
                         drawTitleScreen();
                     }
                 }
@@ -1258,7 +1340,11 @@
             // ウィンドウリサイズ
             window.addEventListener('resize', () => {
                 resizeCanvas();
-                if (gameState === 'title') {
+                if (gameState === 'pleaseTap') {
+                    if (!pleaseTapAnimation) {
+                        animatePleaseTapScreen();
+                    }
+                } else if (gameState === 'title') {
                     drawTitleScreen();
                 } else if (gameState === 'highscore') {
                     drawHighScoreScreen();
@@ -1275,10 +1361,11 @@
         function init() {
             resizeCanvas();
             initEventListeners();
-            loadBGM(); // BGMを読み込む
+            loadBGM(); // ゲーム中BGMを読み込む
+            loadTitleBGM(); // タイトルBGMを読み込む
             loadGameOverBGM(); // ゲームオーバーBGMを読み込む
             loadYogaImage(); // 画像を読み込む
-            drawTitleScreen();
+            animatePleaseTapScreen(); // Please Tap画面のアニメーションを開始
             
             // PWA: Service Worker登録
             if ('serviceWorker' in navigator) {
