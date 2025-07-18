@@ -123,6 +123,7 @@
         let fallSpeed = 30;
         let totalRows = 0;
         let yogaImage = null;
+        let bgmAudio = null;
 
         /**
          * キャンバスサイズを画面に合わせてリサイズする
@@ -479,6 +480,7 @@
         function gameOver() {
             gameState = 'gameOver';
             cancelAnimationFrame(gameLoop);
+            stopBGM(); // BGMを停止
             drawGameOverScreen();
         }
 
@@ -513,6 +515,7 @@
             const titleFontSize = isSmallScreen ? 24 : 32;
             const subtitleFontSize = isSmallScreen ? 14 : 16;
             const instructionFontSize = isSmallScreen ? 16 : 18;
+            const versionFontSize = isSmallScreen ? 12 : 14;
 
             // タイトルテキスト
             ctx.fillStyle = 'white';
@@ -536,11 +539,74 @@
             ctx.fillStyle = 'white';
             const instructionY = isSmallScreen ? canvas.height * 0.88 : canvas.height * 0.85;
             ctx.fillText('画面をタップしてゲーム開始', canvas.width / 2, instructionY);
+
+            // バージョン情報（右下に配置）
+            ctx.font = `${versionFontSize}px Arial`;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.textAlign = 'right';
+            ctx.fillText('Ver. 0.50', canvas.width - 10, canvas.height - 10);
         }
 
         /**
-         * ヨガ行者の画像を読み込む
+         * BGMを読み込む
          */
+        function loadBGM() {
+            try {
+                bgmAudio = new Audio('soul-stage.mp3');
+                bgmAudio.loop = true; // リピート再生を有効化
+                bgmAudio.volume = 0.7; // 音量を少し下げる
+                bgmAudio.preload = 'auto';
+                
+                bgmAudio.addEventListener('canplaythrough', () => {
+                    console.log('BGMの読み込み完了');
+                });
+                
+                bgmAudio.addEventListener('error', (e) => {
+                    console.error('BGMの読み込みに失敗しました:', e);
+                    bgmAudio = null;
+                });
+            } catch (error) {
+                console.error('BGMの初期化に失敗しました:', error);
+                bgmAudio = null;
+            }
+        }
+
+        /**
+         * BGMを再生する
+         */
+        function playBGM() {
+            if (bgmAudio) {
+                try {
+                    bgmAudio.currentTime = 0; // 最初から再生
+                    const playPromise = bgmAudio.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            console.log('BGM再生開始');
+                        }).catch((error) => {
+                            console.error('BGM再生に失敗しました:', error);
+                        });
+                    }
+                } catch (error) {
+                    console.error('BGM再生エラー:', error);
+                }
+            }
+        }
+
+        /**
+         * BGMを停止する
+         */
+        function stopBGM() {
+            if (bgmAudio) {
+                try {
+                    bgmAudio.pause();
+                    bgmAudio.currentTime = 0;
+                    console.log('BGM停止');
+                } catch (error) {
+                    console.error('BGM停止エラー:', error);
+                }
+            }
+        }
         function loadYogaImage() {
             const img = new Image();
             img.onload = () => {
@@ -703,6 +769,10 @@
             totalRows = 0;
             updateScoreDisplay();
             gameState = 'playing';
+            
+            // BGMを再生開始
+            playBGM();
+            
             update();
         }
 
@@ -813,9 +883,11 @@
                 }
             } else if (gameState === 'highscore') {
                 gameState = 'title';
+                stopBGM(); // BGMを停止
                 drawTitleScreen();
             } else if (gameState === 'gameOver') {
                 gameState = 'title';
+                stopBGM(); // BGMを停止
                 drawTitleScreen();
             }
         }
@@ -883,9 +955,11 @@
                         }
                     } else if (gameState === 'highscore') {
                         gameState = 'title';
+                        stopBGM(); // BGMを停止
                         drawTitleScreen();
                     } else if (gameState === 'gameOver') {
                         gameState = 'title';
+                        stopBGM(); // BGMを停止
                         drawTitleScreen();
                     }
                 }
@@ -914,6 +988,7 @@
         function init() {
             resizeCanvas();
             initEventListeners();
+            loadBGM(); // BGMを読み込む
             loadYogaImage(); // 画像を読み込む
             drawTitleScreen();
         }
