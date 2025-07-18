@@ -674,7 +674,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 0.50', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 0.51', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -743,15 +743,22 @@
                 }
             }
             
-            // ゲームオーバーBGMをアンロック
+            // ゲームオーバーBGMをアンロック（音量を一時的に0にして無音でアンロック）
             if (gameoverBgmAudio) {
+                const originalVolume = gameoverBgmAudio.volume;
+                gameoverBgmAudio.volume = 0; // 無音にする
+                
                 const playPromise = gameoverBgmAudio.play();
                 if (playPromise !== undefined) {
                     playPromise.then(() => {
-                        gameoverBgmAudio.pause();
-                        gameoverBgmAudio.currentTime = 0;
-                        console.log('ゲームオーバーBGMがアンロックされました');
+                        setTimeout(() => {
+                            gameoverBgmAudio.pause();
+                            gameoverBgmAudio.currentTime = 0;
+                            gameoverBgmAudio.volume = originalVolume; // 音量を元に戻す
+                            console.log('ゲームオーバーBGMがアンロックされました');
+                        }, 100);
                     }).catch(() => {
+                        gameoverBgmAudio.volume = originalVolume; // 失敗時も音量を戻す
                         console.log('ゲームオーバーBGMのアンロックに失敗');
                     });
                 }
@@ -998,11 +1005,16 @@
             updateScoreDisplay();
             gameState = 'playing';
             
+            // 確実にゲームオーバーBGMを停止
+            stopGameOverBGM();
+            
             // 音声ファイルをアンロック（初回ゲーム開始時）
             unlockAudioFiles();
             
-            // BGMを再生開始
-            playBGM();
+            // 少し待ってからゲーム中BGMを再生開始
+            setTimeout(() => {
+                playBGM();
+            }, 200);
             
             update();
         }
