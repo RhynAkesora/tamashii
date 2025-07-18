@@ -79,7 +79,7 @@
 
         // ゲーム設定
         const gridWidth = 10;
-        const gridHeight = 20;
+        const gridHeight = 14;
         const cellDivisions = 5;
         const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
         
@@ -113,7 +113,7 @@
         let isClearing = false;
         let comboCount = 0;
         let maxCombo = 0;
-        let gameState = 'start';
+        let gameState = 'title';
         let comboDisplayTimeout;
         let touchStartX = 0;
         let touchStartY = 0;
@@ -122,6 +122,7 @@
         let lastClearedTime = 0;
         let fallSpeed = 30;
         let totalRows = 0;
+        let yogaImage = null;
 
         /**
          * キャンバスサイズを画面に合わせてリサイズする
@@ -482,24 +483,192 @@
         }
 
         /**
-         * スタート画面を描画する
+         * タイトル画面を描画する
          */
-        function drawStartScreen() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        function drawTitleScreen() {
+            ctx.fillStyle = 'linear-gradient(180deg, #2c5aa0 0%, #5b3a8f 50%, #1a1a2e 100%)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 背景グラデーション
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#2c5aa0');
+            gradient.addColorStop(0.5, '#5b3a8f');
+            gradient.addColorStop(1, '#1a1a2e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 星を描画
             ctx.fillStyle = 'white';
-            ctx.font = '30px Arial';
+            for (let i = 0; i < 20; i++) {
+                const x = (i * 47) % canvas.width;
+                const y = (i * 23) % (canvas.height * 0.6);
+                ctx.fillRect(x, y, 2, 2);
+            }
+
+            // ヨガ行者のドット絵を描画
+            drawYogaMonk();
+
+            // タイトルテキスト
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 32px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('魂テトリス', canvas.width / 2, canvas.height / 2 - 40);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.strokeText('魂テトリス', canvas.width / 2, canvas.height * 0.15);
+            ctx.fillText('魂テトリス', canvas.width / 2, canvas.height * 0.15);
+
+            // サブタイトル
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#cccccc';
+            ctx.fillText('~ Soul Tetris ~', canvas.width / 2, canvas.height * 0.22);
+
+            // ゲーム開始の説明
+            ctx.font = '18px Arial';
+            ctx.fillStyle = 'white';
+            ctx.fillText('画面をタップしてゲーム開始', canvas.width / 2, canvas.height * 0.85);
+
+            // ハイスコアボタン
+            drawHighScoreButton();
+        }
+
+        /**
+         * ヨガ行者の画像を読み込む
+         */
+        async function loadYogaImage() {
+            try {
+                const imageData = await window.fs.readFile('yoga01.png');
+                const blob = new Blob([imageData], { type: 'image/png' });
+                const imageUrl = URL.createObjectURL(blob);
+                
+                const img = new Image();
+                img.onload = () => {
+                    yogaImage = img;
+                    URL.revokeObjectURL(imageUrl);
+                    if (gameState === 'title') {
+                        drawTitleScreen();
+                    }
+                };
+                img.src = imageUrl;
+            } catch (error) {
+                console.error('ヨガ画像の読み込みに失敗しました:', error);
+                // 画像読み込み失敗時は何も表示しない
+            }
+        }
+
+        /**
+         * ヨガ行者の画像を描画する
+         */
+        function drawYogaMonk() {
+            if (!yogaImage) return;
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // 画像のサイズを画面に合わせて調整
+            const maxImageWidth = canvas.width * 0.4;
+            const maxImageHeight = canvas.height * 0.4;
+            
+            const scale = Math.min(
+                maxImageWidth / yogaImage.width,
+                maxImageHeight / yogaImage.height
+            );
+            
+            const imageWidth = yogaImage.width * scale;
+            const imageHeight = yogaImage.height * scale;
+            
+            const imageX = centerX - imageWidth / 2;
+            const imageY = centerY - imageHeight / 2 - 20;
+
+            // 光輪（オーラ）を背景に描画
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY - 20, Math.max(imageWidth, imageHeight) / 2 + 40, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY - 20, Math.max(imageWidth, imageHeight) / 2 + 60, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY - 20, Math.max(imageWidth, imageHeight) / 2 + 80, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // ヨガ行者の画像を描画
+            ctx.drawImage(yogaImage, imageX, imageY, imageWidth, imageHeight);
+        }
+
+        /**
+         * ハイスコアボタンを描画する
+         */
+        function drawHighScoreButton() {
+            const buttonWidth = canvas.width * 0.3;
+            const buttonHeight = 40;
+            const buttonX = canvas.width / 2 - buttonWidth / 2;
+            const buttonY = canvas.height * 0.75;
+
+            // ボタンの背景
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+            
+            // ボタンの境界線
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
+
+            // ボタンテキスト
+            ctx.fillStyle = 'white';
+            ctx.font = '18px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ハイスコア', canvas.width / 2, buttonY + 25);
+        }
+
+        /**
+         * ハイスコア画面を描画する
+         */
+        function drawHighScoreScreen() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '28px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ハイスコア', canvas.width / 2, canvas.height * 0.3);
+            
             ctx.font = '20px Arial';
-            ctx.fillText('タップして開始', canvas.width / 2, canvas.height / 2 + 20);
+            ctx.fillText('1位: 50,000', canvas.width / 2, canvas.height * 0.45);
+            ctx.fillText('2位: 35,000', canvas.width / 2, canvas.height * 0.52);
+            ctx.fillText('3位: 20,000', canvas.width / 2, canvas.height * 0.59);
+            ctx.fillText('4位: 15,000', canvas.width / 2, canvas.height * 0.66);
+            ctx.fillText('5位: 10,000', canvas.width / 2, canvas.height * 0.73);
+            
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#cccccc';
+            ctx.fillText('画面をタップして戻る', canvas.width / 2, canvas.height * 0.85);
+        }
+
+        /**
+         * ハイスコアボタンがタップされたかチェックする
+         */
+        function isHighScoreButtonTapped(x, y) {
+            const buttonWidth = canvas.width * 0.3;
+            const buttonHeight = 40;
+            const buttonX = canvas.width / 2 - buttonWidth / 2;
+            const buttonY = canvas.height * 0.75;
+            
+            return x >= buttonX && x <= buttonX + buttonWidth && 
+                   y >= buttonY && y <= buttonY + buttonHeight;
         }
 
         /**
          * ゲームオーバー画面を描画する
          */
         function drawGameOverScreen() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = 'white';
             ctx.font = '30px Arial';
@@ -507,7 +676,9 @@
             ctx.fillText('ゲームオーバー', canvas.width / 2, canvas.height / 2 - 40);
             ctx.font = '20px Arial';
             ctx.fillText(`最終スコア: ${score}`, canvas.width / 2, canvas.height / 2);
-            ctx.fillText('タップしてリトライ', canvas.width / 2, canvas.height / 2 + 40);
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#cccccc';
+            ctx.fillText('タップしてタイトルに戻る', canvas.width / 2, canvas.height / 2 + 40);
         }
 
         /**
@@ -625,8 +796,23 @@
          */
         function handleCanvasClick(e) {
             e.preventDefault();
-            if (gameState === 'start' || gameState === 'gameOver') {
-                resetGame();
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            if (gameState === 'title') {
+                if (isHighScoreButtonTapped(x, y)) {
+                    gameState = 'highscore';
+                    drawHighScoreScreen();
+                } else {
+                    resetGame();
+                }
+            } else if (gameState === 'highscore') {
+                gameState = 'title';
+                drawTitleScreen();
+            } else if (gameState === 'gameOver') {
+                gameState = 'title';
+                drawTitleScreen();
             }
         }
 
@@ -667,52 +853,55 @@
 
             canvas.addEventListener('touchend', (e) => {
                 e.preventDefault();
-                const touchEndTime = Date.now();
-                const touchDuration = touchEndTime - touchStartTime;
+                if (gameState === 'playing') {
+                    const touchEndTime = Date.now();
+                    const touchDuration = touchEndTime - touchStartTime;
 
-                // 短いタップは回転
-                if (touchDuration < 200 && isTouchHolding) {
-                    handleTouch('rotate');
+                    // 短いタップは回転
+                    if (touchDuration < 200 && isTouchHolding) {
+                        handleTouch('rotate');
+                    }
+
+                    isTouchHolding = false;
+                } else {
+                    // タイトル画面、ハイスコア画面、ゲームオーバー画面での処理
+                    const touch = e.changedTouches[0];
+                    const rect = canvas.getBoundingClientRect();
+                    const x = touch.clientX - rect.left;
+                    const y = touch.clientY - rect.top;
+
+                    if (gameState === 'title') {
+                        if (isHighScoreButtonTapped(x, y)) {
+                            gameState = 'highscore';
+                            drawHighScoreScreen();
+                        } else {
+                            resetGame();
+                        }
+                    } else if (gameState === 'highscore') {
+                        gameState = 'title';
+                        drawTitleScreen();
+                    } else if (gameState === 'gameOver') {
+                        gameState = 'title';
+                        drawTitleScreen();
+                    }
                 }
-
-                isTouchHolding = false;
             });
 
-            // クリックイベント
+            // クリックイベント（デスクトップ用）
             canvas.addEventListener('click', handleCanvasClick);
-            canvas.addEventListener('touchend', handleCanvasClick);
 
             // ウィンドウリサイズ
             window.addEventListener('resize', () => {
                 resizeCanvas();
-                if (gameState === 'start') {
-                    drawStartScreen();
+                if (gameState === 'title') {
+                    drawTitleScreen();
+                } else if (gameState === 'highscore') {
+                    drawHighScoreScreen();
                 } else if (gameState === 'gameOver') {
                     drawGameOverScreen();
                 }
             });
 
-            // キーボード操作
-            document.addEventListener('keydown', (event) => {
-                if (gameState === 'playing') {
-                    switch (event.code) {
-                        case 'ArrowLeft':
-                            handleTouch('left');
-                            break;
-                        case 'ArrowRight':
-                            handleTouch('right');
-                            break;
-                        case 'ArrowUp':
-                            handleTouch('rotate');
-                            break;
-                        case 'ArrowDown':
-                            handleTouch('drop');
-                            break;
-                    }
-                } else if (event.code === 'Space' && (gameState === 'start' || gameState === 'gameOver')) {
-                    resetGame();
-                }
-            });
         }
 
         /**
@@ -721,7 +910,8 @@
         function init() {
             resizeCanvas();
             initEventListeners();
-            drawStartScreen();
+            loadYogaImage(); // 画像を読み込む
+            drawTitleScreen();
         }
 
         // ゲーム開始
