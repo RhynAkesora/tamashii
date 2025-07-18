@@ -6,7 +6,7 @@
     <title>魂テトリス</title>
     
     <!-- PWA用メタタグ -->
-    <meta name="description" content="魂のステージを上げるテトリスゲーム - 魂テトリス">
+    <meta name="description" content="瞑想的なテトリスゲーム - 魂テトリス">
     <meta name="theme-color" content="#2c5aa0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -229,12 +229,6 @@
             const nextAreaX = gameAreaWidth;
             const nextAreaWidth = canvas.width - gameAreaWidth;
             
-            // 上部の砂漠エリア
-            drawDesertArea(nextAreaX, 0, nextAreaWidth, canvas.height * 0.3);
-            
-            // 下部の砂漠エリア
-            drawDesertArea(nextAreaX, canvas.height * 0.7, nextAreaWidth, canvas.height * 0.3);
-            
             // 右側全体の基本砂漠背景
             const gradient = ctx.createLinearGradient(nextAreaX, 0, canvas.width, 0);
             gradient.addColorStop(0, '#f4a460'); // サンディブラウン
@@ -246,7 +240,7 @@
         }
 
         /**
-         * 砂漠エリアを描画する
+         * 砂漠エリアを描画する (エフェクト用、現在は未使用)
          */
         function drawDesertArea(x, y, width, height) {
             // 砂漠のベースグラデーション
@@ -270,7 +264,7 @@
         }
 
         /**
-         * 砂丘の波形を描画する
+         * 砂丘の波形を描画する (エフェクト用、現在は未使用)
          */
         function drawSandDunes(x, y, width, height) {
             const waveCount = 3;
@@ -305,7 +299,7 @@
         }
 
         /**
-         * 砂の粒子エフェクトを描画する
+         * 砂の粒子エフェクトを描画する (エフェクト用、現在は未使用)
          */
         function drawSandParticles(x, y, width, height) {
             const particleCount = Math.floor(width * height / 1000);
@@ -324,7 +318,7 @@
         }
 
         /**
-         * 熱気の表現を描画する
+         * 熱気の表現を描画する (エフェクト用、現在は未使用)
          */
         function drawHeatShimmer(x, y, width, height) {
             const shimmerCount = 5;
