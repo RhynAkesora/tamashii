@@ -13,10 +13,12 @@
             overflow: hidden; 
             position: fixed;
         }
+        
         body { 
             background-color: #f0f0f0; 
             font-family: Arial, sans-serif; 
         }
+        
         #gameContainer { 
             position: absolute; 
             width: 100%; 
@@ -26,11 +28,13 @@
             justify-content: flex-start;
             align-items: center; 
         }
+        
         canvas { 
             border: 1px solid #000; 
             max-width: 100%; 
             max-height: calc(100% - 30px); 
         }
+        
         #scoreDisplay {
             width: 100%;
             height: 30px;
@@ -45,6 +49,7 @@
             left: 0;
             z-index: 10;
         }
+        
         #comboDisplay { 
             position: absolute; 
             top: 50%; 
@@ -64,30 +69,39 @@
         <canvas id="gameCanvas"></canvas>
         <div id="comboDisplay"></div>
     </div>
+
     <script>
+        // Canvas要素とコンテキストの取得
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreDisplayElement = document.getElementById('scoreDisplay');
         const comboDisplayElement = document.getElementById('comboDisplay');
+
+        // ゲーム設定
         const gridWidth = 10;
         const gridHeight = 20;
         const cellDivisions = 5;
         const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
+        
+        // テトリスピースの定義
         const pieces = [
-            [[1,1,1,1]],
-            [[1,1],[1,1]],
-            [[1,1,1],[0,1,0]],
-            [[1,1,1],[1,0,0]],
-            [[1,1,1],[0,0,1]],
-            [[1,1,0],[0,1,1]],
-            [[0,1,1],[1,1,0]]
+            [[1,1,1,1]], // I字
+            [[1,1],[1,1]], // O字
+            [[1,1,1],[0,1,0]], // T字
+            [[1,1,1],[1,0,0]], // L字
+            [[1,1,1],[0,0,1]], // J字
+            [[1,1,0],[0,1,1]], // S字
+            [[0,1,1],[1,1,0]]  // Z字
         ];
+
+        // UI設定
         const NEXT_PIECE_PADDING = 10;
         const NEXT_PIECE_LABEL = 'NEXT';
         const SPEED_INCREASE_RATE = 0.99;
         const SPEED_INCREASE_INTERVAL = 5;
         const comboTimeThreshold = 1000;
 
+        // ゲーム変数
         let cellSize, sandSize;
         let sandParticles = [];
         let currentPiece;
@@ -109,6 +123,9 @@
         let fallSpeed = 30;
         let totalRows = 0;
 
+        /**
+         * キャンバスサイズを画面に合わせてリサイズする
+         */
         function resizeCanvas() {
             const containerWidth = window.innerWidth;
             const containerHeight = window.innerHeight - 30;
@@ -137,6 +154,9 @@
             canvas.style.top = `${((containerHeight - canvas.height) / 2) + 30}px`;
         }
 
+        /**
+         * 新しいテトリスピースを作成する
+         */
         function createPiece() {
             const pieceType = Math.floor(Math.random() * pieces.length);
             const colorIndex = Math.floor(Math.random() * colors.length);
@@ -148,39 +168,57 @@
             };
         }
 
+        /**
+         * ゲームグリッドと砂粒子を描画する
+         */
         function drawGrid() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            // 背景を描画
             ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
 
+            // 砂粒子を描画
             for (const particle of sandParticles) {
                 ctx.fillStyle = colors[particle.color];
                 ctx.fillRect(particle.x * sandSize, particle.y * sandSize, sandSize, sandSize);
             }
         }
 
+        /**
+         * 現在のピースを描画する
+         */
         function drawPiece() {
             if (!currentPiece) return;
             ctx.fillStyle = colors[currentPiece.color];
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
-                        ctx.fillRect((currentPiece.x + x) * cellSize, (currentPiece.y + y) * cellSize, cellSize - 1, cellSize - 1);
+                        ctx.fillRect(
+                            (currentPiece.x + x) * cellSize, 
+                            (currentPiece.y + y) * cellSize, 
+                            cellSize - 1, 
+                            cellSize - 1
+                        );
                     }
                 }
             }
         }
 
+        /**
+         * 次のピースを描画する
+         */
         function drawNextPiece() {
             const nextPieceAreaWidth = canvas.width - cellSize * gridWidth;
             const nextPieceSize = Math.min(cellSize * 0.8, (nextPieceAreaWidth - NEXT_PIECE_PADDING * 2) / 4);
             const nextPieceX = cellSize * gridWidth + (nextPieceAreaWidth - nextPieceSize * 4) / 2;
             const nextPieceY = NEXT_PIECE_PADDING * 2 + 20;
 
+            // 次のピースエリアの背景
             ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
             ctx.fillRect(cellSize * gridWidth, 0, nextPieceAreaWidth, canvas.height);
 
+            // 境界線を描画
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -188,14 +226,17 @@
             ctx.lineTo(cellSize * gridWidth, canvas.height);
             ctx.stroke();
 
+            // "NEXT"ラベルを描画
             ctx.fillStyle = 'white';
             ctx.font = '20px Arial';
             ctx.textAlign = 'center';
             ctx.fillText(NEXT_PIECE_LABEL, cellSize * gridWidth + nextPieceAreaWidth / 2, NEXT_PIECE_PADDING + 20);
 
+            // 次のピースの背景
             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.fillRect(nextPieceX, nextPieceY, nextPieceSize * 4, nextPieceSize * 4);
 
+            // 次のピースを描画
             ctx.fillStyle = colors[nextPiece.color];
             for (let y = 0; y < nextPiece.shape.length; y++) {
                 for (let x = 0; x < nextPiece.shape[y].length; x++) {
@@ -211,6 +252,9 @@
             }
         }
 
+        /**
+         * ピースが指定された方向に移動できるかチェックする
+         */
         function canMove(dx, dy) {
             if (!currentPiece) return false;
             for (let y = 0; y < currentPiece.shape.length; y++) {
@@ -228,9 +272,14 @@
             return true;
         }
 
+        /**
+         * ピースを回転させる
+         */
         function rotate() {
             if (!currentPiece) return;
-            const rotated = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i]).reverse());
+            const rotated = currentPiece.shape[0].map((_, i) => 
+                currentPiece.shape.map(row => row[i]).reverse()
+            );
             const previousShape = currentPiece.shape;
             currentPiece.shape = rotated;
             if (!canMove(0, 0)) {
@@ -238,6 +287,9 @@
             }
         }
 
+        /**
+         * ピースを砂粒子に変換してフィールドに配置する
+         */
         function mergePiece() {
             if (!currentPiece) return;
             for (let y = 0; y < currentPiece.shape.length; y++) {
@@ -259,6 +311,9 @@
             isSettling = true;
         }
 
+        /**
+         * 指定された色の連結成分を見つける
+         */
         function findConnectedComponents(color) {
             const visited = new Set();
             const components = [];
@@ -272,6 +327,9 @@
             return components;
         }
 
+        /**
+         * 深度優先探索で連結成分を探索する
+         */
         function dfs(particle, color, visited, component) {
             const key = `${particle.x},${particle.y}`;
             if (visited.has(key)) return;
@@ -282,13 +340,18 @@
             for (const [dx, dy] of directions) {
                 const newX = particle.x + dx;
                 const newY = particle.y + dy;
-                const neighbor = sandParticles.find(p => p.x === newX && p.y === newY && p.color === color);
+                const neighbor = sandParticles.find(p => 
+                    p.x === newX && p.y === newY && p.color === color
+                );
                 if (neighbor) {
                     dfs(neighbor, color, visited, component);
                 }
             }
         }
 
+        /**
+         * 連結成分が横幅全体に渡っているかチェックする
+         */
         function isFullWidth(component) {
             let minX = gridWidth * cellDivisions;
             let maxX = 0;
@@ -300,10 +363,16 @@
             return maxX - minX + 1 === gridWidth * cellDivisions;
         }
 
+        /**
+         * 指定された連結成分の砂粒子を削除する
+         */
         function removeSandParticles(component) {
             sandParticles = sandParticles.filter(p => !component.has(`${p.x},${p.y}`));
         }
 
+        /**
+         * コンボスコアを計算する
+         */
         function calculateComboScore(combo, lines) {
             const baseScore = lines * 100;
             const baseMultiplier = 1.5;
@@ -311,6 +380,9 @@
             return Math.floor(baseScore * multiplier);
         }
 
+        /**
+         * コンボ表示を画面に表示する
+         */
         function showComboDisplay(combo) {
             if (combo < 2) return;
             const multiplier = Math.pow(1.5, combo - 1).toFixed(2);
@@ -322,6 +394,9 @@
             }, 2000);
         }
 
+        /**
+         * ラインを消去できるかチェックして消去する
+         */
         function checkAndClearLines() {
             let cleared = false;
             let clearedLines = 0;
@@ -354,16 +429,23 @@
             return cleared;
         }
 
+        /**
+         * 砂粒子の物理シミュレーションを実行する
+         */
         function simulateSand() {
             let moved = false;
             sandParticles.sort((a, b) => b.y - a.y);
             for (const particle of sandParticles) {
-                if (particle.y < gridHeight * cellDivisions - 1 && !sandParticles.some(p => p.x === particle.x && p.y === particle.y + 1)) {
+                if (particle.y < gridHeight * cellDivisions - 1 && 
+                    !sandParticles.some(p => p.x === particle.x && p.y === particle.y + 1)) {
                     particle.y++;
                     moved = true;
                 } else if (particle.y < gridHeight * cellDivisions - 1) {
-                    const leftClear = particle.x > 0 && !sandParticles.some(p => p.x === particle.x - 1 && p.y === particle.y + 1);
-                    const rightClear = particle.x < gridWidth * cellDivisions - 1 && !sandParticles.some(p => p.x === particle.x + 1 && p.y === particle.y + 1);
+                    const leftClear = particle.x > 0 && 
+                        !sandParticles.some(p => p.x === particle.x - 1 && p.y === particle.y + 1);
+                    const rightClear = particle.x < gridWidth * cellDivisions - 1 && 
+                        !sandParticles.some(p => p.x === particle.x + 1 && p.y === particle.y + 1);
+                    
                     if (leftClear && rightClear) {
                         particle.x += Math.random() < 0.5 ? -1 : 1;
                         particle.y++;
@@ -382,16 +464,26 @@
             return moved;
         }
 
+        /**
+         * スコア表示を更新する
+         */
         function updateScoreDisplay() {
-            scoreDisplayElement.textContent = `スコア: ${score} 最高コンボ: ${maxCombo}x 速度: ${(30 / fallSpeed).toFixed(2)}x`;
+            scoreDisplayElement.textContent = 
+                `スコア: ${score} 最高コンボ: ${maxCombo}x 速度: ${(30 / fallSpeed).toFixed(2)}x`;
         }
 
+        /**
+         * ゲームオーバー処理
+         */
         function gameOver() {
             gameState = 'gameOver';
             cancelAnimationFrame(gameLoop);
             drawGameOverScreen();
         }
 
+        /**
+         * スタート画面を描画する
+         */
         function drawStartScreen() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -403,6 +495,9 @@
             ctx.fillText('タップして開始', canvas.width / 2, canvas.height / 2 + 20);
         }
 
+        /**
+         * ゲームオーバー画面を描画する
+         */
         function drawGameOverScreen() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -415,6 +510,9 @@
             ctx.fillText('タップしてリトライ', canvas.width / 2, canvas.height / 2 + 40);
         }
 
+        /**
+         * ゲームをリセットして新しいゲームを開始する
+         */
         function resetGame() {
             sandParticles = [];
             score = 0;
@@ -433,15 +531,22 @@
             update();
         }
 
+        /**
+         * メインゲームループ
+         */
         function update() {
             if (gameState !== 'playing') return;
 
             frameCount++;
+            
+            // ピースの自動落下
             if (frameCount % Math.floor(fallSpeed) === 0 && !isSettling && !isClearing && currentPiece) {
                 if (canMove(0, 1)) {
                     currentPiece.y++;
                     score++;
                     totalRows++;
+                    
+                    // スピードアップ
                     if (totalRows % SPEED_INCREASE_INTERVAL === 0) {
                         fallSpeed *= SPEED_INCREASE_RATE;
                     }
@@ -451,6 +556,7 @@
                 }
             }
 
+            // 砂粒子の物理シミュレーション
             if (isSettling) {
                 if (!simulateSand()) {
                     isSettling = false;
@@ -458,6 +564,7 @@
                 }
             }
 
+            // ライン消去処理
             if (isClearing) {
                 const cleared = checkAndClearLines();
                 if (cleared) {
@@ -475,6 +582,7 @@
                 }
             }
 
+            // 描画
             drawGrid();
             if (currentPiece && !isSettling && !isClearing) {
                 drawPiece();
@@ -485,6 +593,9 @@
             gameLoop = requestAnimationFrame(update);
         }
 
+        /**
+         * タッチ操作を処理する
+         */
         function handleTouch(action) {
             if (gameState !== 'playing') return;
 
@@ -509,6 +620,9 @@
             }
         }
 
+        /**
+         * キャンバスクリック処理
+         */
         function handleCanvasClick(e) {
             e.preventDefault();
             if (gameState === 'start' || gameState === 'gameOver') {
@@ -516,7 +630,11 @@
             }
         }
 
+        /**
+         * イベントリスナーを初期化する
+         */
         function initEventListeners() {
+            // タッチイベント
             canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 const touch = e.touches[0];
@@ -534,11 +652,13 @@
                 const deltaX = touch.clientX - touchStartX;
                 const deltaY = touch.clientY - touchStartY;
 
+                // 横方向のスワイプ
                 if (Math.abs(deltaX) > cellSize) {
                     handleTouch(deltaX > 0 ? 'right' : 'left');
                     touchStartX = touch.clientX;
                 }
 
+                // 下方向のスワイプ（ハードドロップ）
                 if (deltaY > cellSize && isTouchHolding) {
                     handleTouch('drop');
                     isTouchHolding = false;
@@ -550,6 +670,7 @@
                 const touchEndTime = Date.now();
                 const touchDuration = touchEndTime - touchStartTime;
 
+                // 短いタップは回転
                 if (touchDuration < 200 && isTouchHolding) {
                     handleTouch('rotate');
                 }
@@ -557,9 +678,11 @@
                 isTouchHolding = false;
             });
 
+            // クリックイベント
             canvas.addEventListener('click', handleCanvasClick);
             canvas.addEventListener('touchend', handleCanvasClick);
 
+            // ウィンドウリサイズ
             window.addEventListener('resize', () => {
                 resizeCanvas();
                 if (gameState === 'start') {
@@ -569,6 +692,7 @@
                 }
             });
 
+            // キーボード操作
             document.addEventListener('keydown', (event) => {
                 if (gameState === 'playing') {
                     switch (event.code) {
@@ -591,12 +715,16 @@
             });
         }
 
+        /**
+         * ゲームを初期化する
+         */
         function init() {
             resizeCanvas();
             initEventListeners();
             drawStartScreen();
         }
 
+        // ゲーム開始
         init();
     </script>
 </body>
