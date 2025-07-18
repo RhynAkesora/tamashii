@@ -3,7 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>魂テトリスVer.1</title>
+    <title>魂テトリス</title>
+    
+    <!-- PWA用メタタグ -->
+    <meta name="description" content="瞑想的なテトリスゲーム - 魂テトリス">
+    <meta name="theme-color" content="#2c5aa0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="魂テトリス">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- アイコン -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    
     <style>
         html, body { 
             margin: 0; 
@@ -644,6 +660,7 @@
             const isSmallScreen = canvas.height < 600;
             const titleFontSize = isSmallScreen ? 24 : 32;
             const subtitleFontSize = isSmallScreen ? 14 : 16;
+            const conceptFontSize = isSmallScreen ? 13 : 15;
             const instructionFontSize = isSmallScreen ? 16 : 18;
             const versionFontSize = isSmallScreen ? 12 : 14;
 
@@ -661,6 +678,12 @@
             ctx.fillStyle = '#cccccc';
             ctx.fillText('~ Soul Tetris ~', canvas.width / 2, canvas.height * 0.22);
 
+            // コンセプトメッセージ
+            ctx.font = `${conceptFontSize}px Arial`;
+            ctx.fillStyle = '#ffd700'; // ゴールド色で神聖さを表現
+            const conceptY = isSmallScreen ? canvas.height * 0.62 : canvas.height * 0.65;
+            ctx.fillText('邪気を浄化して魂のステージを上げよう！', canvas.width / 2, conceptY);
+
             // ハイスコアボタン
             drawHighScoreButton();
 
@@ -674,7 +697,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 0.51', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 0.52', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1239,6 +1262,17 @@
             loadGameOverBGM(); // ゲームオーバーBGMを読み込む
             loadYogaImage(); // 画像を読み込む
             drawTitleScreen();
+            
+            // PWA: Service Worker登録
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then((registration) => {
+                        console.log('Service Worker登録成功:', registration);
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker登録失敗:', error);
+                    });
+            }
         }
 
         // ゲーム開始
