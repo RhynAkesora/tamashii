@@ -124,6 +124,7 @@
         let totalRows = 0;
         let yogaImage = null;
         let bgmAudio = null;
+        let gameoverBgmAudio = null;
 
         /**
          * キャンバスサイズを画面に合わせてリサイズする
@@ -176,7 +177,10 @@
         function drawGrid() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 背景を描画
+            // 砂漠の背景を描画
+            drawDesertBackground();
+            
+            // ゲームエリアの背景を描画
             ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
 
@@ -184,6 +188,131 @@
             for (const particle of sandParticles) {
                 ctx.fillStyle = colors[particle.color];
                 ctx.fillRect(particle.x * sandSize, particle.y * sandSize, sandSize, sandSize);
+            }
+        }
+
+        /**
+         * 砂漠の背景を描画する
+         */
+        function drawDesertBackground() {
+            const gameAreaWidth = cellSize * gridWidth;
+            const nextAreaX = gameAreaWidth;
+            const nextAreaWidth = canvas.width - gameAreaWidth;
+            
+            // 上部の砂漠エリア
+            drawDesertArea(nextAreaX, 0, nextAreaWidth, canvas.height * 0.3);
+            
+            // 下部の砂漠エリア
+            drawDesertArea(nextAreaX, canvas.height * 0.7, nextAreaWidth, canvas.height * 0.3);
+            
+            // 右側全体の基本砂漠背景
+            const gradient = ctx.createLinearGradient(nextAreaX, 0, canvas.width, 0);
+            gradient.addColorStop(0, '#f4a460'); // サンディブラウン
+            gradient.addColorStop(0.5, '#daa520'); // ゴールデンロッド
+            gradient.addColorStop(1, '#cd853f'); // ペルー
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(nextAreaX, 0, nextAreaWidth, canvas.height);
+        }
+
+        /**
+         * 砂漠エリアを描画する
+         */
+        function drawDesertArea(x, y, width, height) {
+            // 砂漠のベースグラデーション
+            const verticalGradient = ctx.createLinearGradient(x, y, x, y + height);
+            verticalGradient.addColorStop(0, '#ffebb5'); // 明るい砂色
+            verticalGradient.addColorStop(0.3, '#f4a460'); // サンディブラウン
+            verticalGradient.addColorStop(0.7, '#daa520'); // ゴールデンロッド
+            verticalGradient.addColorStop(1, '#b8860b'); // ダークゴールデンロッド
+            
+            ctx.fillStyle = verticalGradient;
+            ctx.fillRect(x, y, width, height);
+            
+            // 砂丘の波形を描画
+            drawSandDunes(x, y, width, height);
+            
+            // 砂の粒子エフェクト
+            drawSandParticles(x, y, width, height);
+            
+            // 熱気の表現
+            drawHeatShimmer(x, y, width, height);
+        }
+
+        /**
+         * 砂丘の波形を描画する
+         */
+        function drawSandDunes(x, y, width, height) {
+            const waveCount = 3;
+            const time = Date.now() * 0.001; // ゆっくりとした動き
+            
+            for (let i = 0; i < waveCount; i++) {
+                const waveY = y + (height / (waveCount + 1)) * (i + 1);
+                const amplitude = height * 0.1;
+                const frequency = 0.01;
+                
+                ctx.beginPath();
+                ctx.moveTo(x, waveY);
+                
+                for (let px = x; px <= x + width; px += 2) {
+                    const wave1 = Math.sin((px - x) * frequency + time + i) * amplitude;
+                    const wave2 = Math.sin((px - x) * frequency * 2 + time * 1.5 + i) * amplitude * 0.5;
+                    const finalY = waveY + wave1 + wave2;
+                    ctx.lineTo(px, finalY);
+                }
+                
+                ctx.lineTo(x + width, y + height);
+                ctx.lineTo(x, y + height);
+                ctx.closePath();
+                
+                const duneGradient = ctx.createLinearGradient(x, waveY - amplitude, x, waveY + amplitude);
+                duneGradient.addColorStop(0, 'rgba(255, 235, 181, 0.6)'); // 明るい砂色
+                duneGradient.addColorStop(1, 'rgba(218, 165, 32, 0.3)'); // 濃い砂色
+                
+                ctx.fillStyle = duneGradient;
+                ctx.fill();
+            }
+        }
+
+        /**
+         * 砂の粒子エフェクトを描画する
+         */
+        function drawSandParticles(x, y, width, height) {
+            const particleCount = Math.floor(width * height / 1000);
+            
+            ctx.fillStyle = 'rgba(255, 235, 181, 0.4)';
+            
+            for (let i = 0; i < particleCount; i++) {
+                const px = x + (i * 17) % width;
+                const py = y + (i * 13) % height;
+                const size = Math.random() * 2 + 1;
+                
+                ctx.beginPath();
+                ctx.arc(px, py, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        /**
+         * 熱気の表現を描画する
+         */
+        function drawHeatShimmer(x, y, width, height) {
+            const shimmerCount = 5;
+            const time = Date.now() * 0.003;
+            
+            for (let i = 0; i < shimmerCount; i++) {
+                const shimmerX = x + (width / shimmerCount) * i + width / (shimmerCount * 2);
+                const shimmerHeight = height * 0.8;
+                
+                const gradient = ctx.createLinearGradient(shimmerX, y, shimmerX, y + shimmerHeight);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                
+                ctx.fillStyle = gradient;
+                
+                const waveOffset = Math.sin(time + i) * 5;
+                ctx.fillRect(shimmerX + waveOffset, y, 3, shimmerHeight);
             }
         }
 
@@ -480,7 +609,8 @@
         function gameOver() {
             gameState = 'gameOver';
             cancelAnimationFrame(gameLoop);
-            stopBGM(); // BGMを停止
+            stopBGM(); // ゲーム中のBGMを停止
+            playGameOverBGM(); // ゲームオーバー用BGMを再生
             drawGameOverScreen();
         }
 
@@ -572,6 +702,30 @@
         }
 
         /**
+         * ゲームオーバー用BGMを読み込む
+         */
+        function loadGameOverBGM() {
+            try {
+                gameoverBgmAudio = new Audio('soul-gameover.mp3');
+                gameoverBgmAudio.loop = false; // リピートしない
+                gameoverBgmAudio.volume = 0.7; // 音量を少し下げる
+                gameoverBgmAudio.preload = 'auto';
+                
+                gameoverBgmAudio.addEventListener('canplaythrough', () => {
+                    console.log('ゲームオーバーBGMの読み込み完了');
+                });
+                
+                gameoverBgmAudio.addEventListener('error', (e) => {
+                    console.error('ゲームオーバーBGMの読み込みに失敗しました:', e);
+                    gameoverBgmAudio = null;
+                });
+            } catch (error) {
+                console.error('ゲームオーバーBGMの初期化に失敗しました:', error);
+                gameoverBgmAudio = null;
+            }
+        }
+
+        /**
          * BGMを再生する
          */
         function playBGM() {
@@ -604,6 +758,43 @@
                     console.log('BGM停止');
                 } catch (error) {
                     console.error('BGM停止エラー:', error);
+                }
+            }
+        }
+
+        /**
+         * ゲームオーバー用BGMを再生する
+         */
+        function playGameOverBGM() {
+            if (gameoverBgmAudio) {
+                try {
+                    gameoverBgmAudio.currentTime = 0; // 最初から再生
+                    const playPromise = gameoverBgmAudio.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            console.log('ゲームオーバーBGM再生開始');
+                        }).catch((error) => {
+                            console.error('ゲームオーバーBGM再生に失敗しました:', error);
+                        });
+                    }
+                } catch (error) {
+                    console.error('ゲームオーバーBGM再生エラー:', error);
+                }
+            }
+        }
+
+        /**
+         * ゲームオーバー用BGMを停止する
+         */
+        function stopGameOverBGM() {
+            if (gameoverBgmAudio) {
+                try {
+                    gameoverBgmAudio.pause();
+                    gameoverBgmAudio.currentTime = 0;
+                    console.log('ゲームオーバーBGM停止');
+                } catch (error) {
+                    console.error('ゲームオーバーBGM停止エラー:', error);
                 }
             }
         }
@@ -883,11 +1074,13 @@
                 }
             } else if (gameState === 'highscore') {
                 gameState = 'title';
-                stopBGM(); // BGMを停止
+                stopBGM(); // ゲーム中BGMを停止
+                stopGameOverBGM(); // ゲームオーバーBGMを停止
                 drawTitleScreen();
             } else if (gameState === 'gameOver') {
                 gameState = 'title';
-                stopBGM(); // BGMを停止
+                stopBGM(); // ゲーム中BGMを停止
+                stopGameOverBGM(); // ゲームオーバーBGMを停止
                 drawTitleScreen();
             }
         }
@@ -955,11 +1148,13 @@
                         }
                     } else if (gameState === 'highscore') {
                         gameState = 'title';
-                        stopBGM(); // BGMを停止
+                        stopBGM(); // ゲーム中BGMを停止
+                        stopGameOverBGM(); // ゲームオーバーBGMを停止
                         drawTitleScreen();
                     } else if (gameState === 'gameOver') {
                         gameState = 'title';
-                        stopBGM(); // BGMを停止
+                        stopBGM(); // ゲーム中BGMを停止
+                        stopGameOverBGM(); // ゲームオーバーBGMを停止
                         drawTitleScreen();
                     }
                 }
@@ -989,6 +1184,7 @@
             resizeCanvas();
             initEventListeners();
             loadBGM(); // BGMを読み込む
+            loadGameOverBGM(); // ゲームオーバーBGMを読み込む
             loadYogaImage(); // 画像を読み込む
             drawTitleScreen();
         }
