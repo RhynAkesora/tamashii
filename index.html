@@ -6,7 +6,7 @@
     <title>魂テトリス</title>
     
     <!-- PWA用メタタグ -->
-    <meta name="description" content="瞑想的なテトリスゲーム - 魂テトリス">
+    <meta name="description" content="魂のステージを上げるテトリスゲーム - 魂テトリス">
     <meta name="theme-color" content="#2c5aa0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1157,7 +1157,7 @@
             pauseButton = { x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight };
 
             // ボタンを描画
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fillStyle = 'rgba(200, 0, 0, 0.7)'; // [変更] ボタンの背景色を赤に変更
             ctx.fillRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height);
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 2;
