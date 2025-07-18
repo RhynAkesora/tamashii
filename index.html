@@ -143,6 +143,7 @@
         let gameoverBgmAudio = null;
         let titleBgmAudio = null;
         let pleaseTapAnimation = null;
+        let pauseButton = { x: 0, y: 0, width: 0, height: 0 };
 
         /**
          * キャンバスサイズを画面に合わせてリサイズする
@@ -577,7 +578,7 @@
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.font = `${pwaNoteFontSize}px Arial`;
             const pwaY = canvas.height / 2 + 60;
-            ctx.fillText('※ホーム画面に追加でこのゲームをアプリ化できます', canvas.width / 2, pwaY);
+            ctx.fillText('※ホーム画面に追加でこのゲームをアプリ化', canvas.width / 2, pwaY);
             
             // クレジット表記（画面下部）
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
@@ -1048,6 +1049,7 @@
                 drawPiece();
             }
             drawNextPiece();
+            drawPauseButton(); // ポーズボタンを描画
 
             updateScoreDisplay();
             gameLoop = requestAnimationFrame(update);
@@ -1121,9 +1123,88 @@
         }
 
         /**
+         * ポーズ画面を描画する
+         */
+        function drawPauseScreen() {
+            // ゲームエリアに完全に不透明なオーバーレイを描画
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
+
+            // ポーズテキストを描画
+            ctx.fillStyle = 'white';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('PAUSED', (cellSize * gridWidth) / 2, canvas.height / 2 - 20);
+            
+            ctx.font = '16px Arial';
+            ctx.fillText('タップして再開', (cellSize * gridWidth) / 2, canvas.height / 2 + 20);
+        }
+
+        /**
+         * ポーズボタンを描画する
+         */
+        function drawPauseButton() {
+            const nextPieceAreaWidth = canvas.width - cellSize * gridWidth;
+            const nextAreaX = cellSize * gridWidth;
+            
+            const buttonWidth = nextPieceAreaWidth * 0.6;
+            const buttonHeight = 40;
+            const buttonX = nextAreaX + (nextPieceAreaWidth - buttonWidth) / 2;
+            const buttonY = canvas.height - buttonHeight - 20; // NEXTエリアの下部に配置
+
+            // クリック検出用に座標を保存
+            pauseButton = { x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight };
+
+            // ボタンを描画
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fillRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height);
+
+            // テキストを描画
+            ctx.fillStyle = 'white';
+            ctx.font = '18px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Pause', pauseButton.x + pauseButton.width / 2, pauseButton.y + pauseButton.height / 2);
+        }
+
+        /**
+         * ポーズボタンがタップされたかチェックする
+         */
+        function isPauseButtonTapped(x, y) {
+            return x >= pauseButton.x && x <= pauseButton.x + pauseButton.width &&
+                   y >= pauseButton.y && y <= pauseButton.y + pauseButton.height;
+        }
+
+        /**
          * イベントリスナーを初期化する
          */
         function initEventListeners() {
+            function handleTap(x, y) {
+                // ポーズ状態の解除が最優先
+                if (gameState === 'paused') {
+                    gameState = 'playing';
+                    playBGM();
+                    update();
+                    return;
+                }
+
+                // プレイ中にポーズボタンが押された場合
+                if (gameState === 'playing' && isPauseButtonTapped(x, y)) {
+                    gameState = 'paused';
+                    stopBGM();
+                    cancelAnimationFrame(gameLoop);
+                    drawPauseScreen();
+                    return;
+                }
+                
+                // その他のゲーム状態の処理
+                handleScreenTap(x, y);
+            }
+
             // タッチ開始
             canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
@@ -1166,6 +1247,11 @@
                 const y = touch.clientY - rect.top;
 
                 if (gameState === 'playing') {
+                    // ポーズボタンのタップ判定を先に行う
+                    if (isPauseButtonTapped(x, y)) {
+                        handleTap(x, y);
+                        return;
+                    }
                     const touchEndTime = Date.now();
                     const touchDuration = touchEndTime - touchStartTime;
                     const deltaX = touch.clientX - touchStartX;
@@ -1176,7 +1262,7 @@
                     }
                     isTouchHolding = false;
                 } else {
-                    handleScreenTap(x, y);
+                    handleTap(x, y);
                 }
             }, { passive: false });
 
@@ -1186,7 +1272,7 @@
                 const rect = canvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
-                handleScreenTap(x, y);
+                handleTap(x, y);
             });
 
             // ウィンドウリサイズ
