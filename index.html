@@ -674,7 +674,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 0.51', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 0.50', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -726,8 +726,37 @@
         }
 
         /**
-         * BGMを再生する
+         * 音声ファイルをアンロックする（ブラウザの自動再生ポリシー対策）
          */
+        function unlockAudioFiles() {
+            // ゲーム中BGMをアンロック
+            if (bgmAudio) {
+                const playPromise = bgmAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        bgmAudio.pause();
+                        bgmAudio.currentTime = 0;
+                        console.log('ゲーム中BGMがアンロックされました');
+                    }).catch(() => {
+                        console.log('ゲーム中BGMのアンロックに失敗');
+                    });
+                }
+            }
+            
+            // ゲームオーバーBGMをアンロック
+            if (gameoverBgmAudio) {
+                const playPromise = gameoverBgmAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        gameoverBgmAudio.pause();
+                        gameoverBgmAudio.currentTime = 0;
+                        console.log('ゲームオーバーBGMがアンロックされました');
+                    }).catch(() => {
+                        console.log('ゲームオーバーBGMのアンロックに失敗');
+                    });
+                }
+            }
+        }
         function playBGM() {
             if (bgmAudio) {
                 try {
@@ -776,6 +805,14 @@
                             console.log('ゲームオーバーBGM再生開始');
                         }).catch((error) => {
                             console.error('ゲームオーバーBGM再生に失敗しました:', error);
+                            // 再生に失敗した場合、再度アンロックを試行
+                            setTimeout(() => {
+                                if (gameoverBgmAudio) {
+                                    gameoverBgmAudio.play().catch(() => {
+                                        console.error('ゲームオーバーBGM再生の再試行も失敗');
+                                    });
+                                }
+                            }, 100);
                         });
                     }
                 } catch (error) {
@@ -960,6 +997,9 @@
             totalRows = 0;
             updateScoreDisplay();
             gameState = 'playing';
+            
+            // 音声ファイルをアンロック（初回ゲーム開始時）
+            unlockAudioFiles();
             
             // BGMを再生開始
             playBGM();
