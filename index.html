@@ -1193,6 +1193,9 @@
                         pleaseTapAnimation = null;
                     }
                     gameState = 'title';
+                    // [修正] 他のBGMが再生されている可能性を考慮し、ここで停止させる
+                    stopBGM();
+                    stopGameOverBGM();
                     playTitleBGM();
                     drawTitleScreen();
                     break;
