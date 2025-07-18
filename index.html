@@ -240,107 +240,6 @@
         }
 
         /**
-         * 砂漠エリアを描画する (エフェクト用、現在は未使用)
-         */
-        function drawDesertArea(x, y, width, height) {
-            // 砂漠のベースグラデーション
-            const verticalGradient = ctx.createLinearGradient(x, y, x, y + height);
-            verticalGradient.addColorStop(0, '#ffebb5'); // 明るい砂色
-            verticalGradient.addColorStop(0.3, '#f4a460'); // サンディブラウン
-            verticalGradient.addColorStop(0.7, '#daa520'); // ゴールデンロッド
-            verticalGradient.addColorStop(1, '#b8860b'); // ダークゴールデンロッド
-            
-            ctx.fillStyle = verticalGradient;
-            ctx.fillRect(x, y, width, height);
-            
-            // 砂丘の波形を描画
-            drawSandDunes(x, y, width, height);
-            
-            // 砂の粒子エフェクト
-            drawSandParticles(x, y, width, height);
-            
-            // 熱気の表現
-            drawHeatShimmer(x, y, width, height);
-        }
-
-        /**
-         * 砂丘の波形を描画する (エフェクト用、現在は未使用)
-         */
-        function drawSandDunes(x, y, width, height) {
-            const waveCount = 3;
-            const time = Date.now() * 0.001; // ゆっくりとした動き
-            
-            for (let i = 0; i < waveCount; i++) {
-                const waveY = y + (height / (waveCount + 1)) * (i + 1);
-                const amplitude = height * 0.1;
-                const frequency = 0.01;
-                
-                ctx.beginPath();
-                ctx.moveTo(x, waveY);
-                
-                for (let px = x; px <= x + width; px += 2) {
-                    const wave1 = Math.sin((px - x) * frequency + time + i) * amplitude;
-                    const wave2 = Math.sin((px - x) * frequency * 2 + time * 1.5 + i) * amplitude * 0.5;
-                    const finalY = waveY + wave1 + wave2;
-                    ctx.lineTo(px, finalY);
-                }
-                
-                ctx.lineTo(x + width, y + height);
-                ctx.lineTo(x, y + height);
-                ctx.closePath();
-                
-                const duneGradient = ctx.createLinearGradient(x, waveY - amplitude, x, waveY + amplitude);
-                duneGradient.addColorStop(0, 'rgba(255, 235, 181, 0.6)'); // 明るい砂色
-                duneGradient.addColorStop(1, 'rgba(218, 165, 32, 0.3)'); // 濃い砂色
-                
-                ctx.fillStyle = duneGradient;
-                ctx.fill();
-            }
-        }
-
-        /**
-         * 砂の粒子エフェクトを描画する (エフェクト用、現在は未使用)
-         */
-        function drawSandParticles(x, y, width, height) {
-            const particleCount = Math.floor(width * height / 1000);
-            
-            ctx.fillStyle = 'rgba(255, 235, 181, 0.4)';
-            
-            for (let i = 0; i < particleCount; i++) {
-                const px = x + (i * 17) % width;
-                const py = y + (i * 13) % height;
-                const size = Math.random() * 2 + 1;
-                
-                ctx.beginPath();
-                ctx.arc(px, py, size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        /**
-         * 熱気の表現を描画する (エフェクト用、現在は未使用)
-         */
-        function drawHeatShimmer(x, y, width, height) {
-            const shimmerCount = 5;
-            const time = Date.now() * 0.003;
-            
-            for (let i = 0; i < shimmerCount; i++) {
-                const shimmerX = x + (width / shimmerCount) * i + width / (shimmerCount * 2);
-                const shimmerHeight = height * 0.8;
-                
-                const gradient = ctx.createLinearGradient(shimmerX, y, shimmerX, y + shimmerHeight);
-                gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-                gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
-                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                
-                ctx.fillStyle = gradient;
-                
-                const waveOffset = Math.sin(time + i) * 5;
-                ctx.fillRect(shimmerX + waveOffset, y, 3, shimmerHeight);
-            }
-        }
-
-        /**
          * 現在のピースを描画する
          */
         function drawPiece() {
@@ -678,7 +577,7 @@
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.font = `${pwaNoteFontSize}px Arial`;
             const pwaY = canvas.height / 2 + 60;
-            ctx.fillText('※ホーム画面に追加でこのゲームをアプリ化', canvas.width / 2, pwaY);
+            ctx.fillText('※ホーム画面に追加でこのゲームをアプリ化できます', canvas.width / 2, pwaY);
             
             // クレジット表記（画面下部）
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
