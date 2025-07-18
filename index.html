@@ -534,25 +534,20 @@
         /**
          * ヨガ行者の画像を読み込む
          */
-        async function loadYogaImage() {
-            try {
-                const imageData = await window.fs.readFile('yoga01.png');
-                const blob = new Blob([imageData], { type: 'image/png' });
-                const imageUrl = URL.createObjectURL(blob);
-                
-                const img = new Image();
-                img.onload = () => {
-                    yogaImage = img;
-                    URL.revokeObjectURL(imageUrl);
-                    if (gameState === 'title') {
-                        drawTitleScreen();
-                    }
-                };
-                img.src = imageUrl;
-            } catch (error) {
-                console.error('ヨガ画像の読み込みに失敗しました:', error);
-                // 画像読み込み失敗時は何も表示しない
-            }
+        function loadYogaImage() {
+            const img = new Image();
+            img.onload = () => {
+                yogaImage = img;
+                console.log('ヨガ画像の読み込み成功');
+                if (gameState === 'title') {
+                    drawTitleScreen();
+                }
+            };
+            img.onerror = () => {
+                console.error('ヨガ画像の読み込みに失敗しました');
+                yogaImage = null;
+            };
+            img.src = 'yoga01.png';
         }
 
         /**
