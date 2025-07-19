@@ -5,17 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>魂テトリス</title>
     
-    <!-- PWA用メタタグ -->
     <meta name="description" content="魂のステージを上げるテトリスゲーム - 魂テトリス">
     <meta name="theme-color" content="#2c5aa0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="魂テトリス">
     
-    <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
     
-    <!-- アイコン -->
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -94,8 +91,8 @@
         const comboDisplayElement = document.getElementById('comboDisplay');
 
         // ゲーム設定
-        const gridWidth = 10;
-        const gridHeight = 14;
+        const gridWidth = 9;  // 横幅を10%狭く
+        const gridHeight = 15; // 縦幅を10%広く
         const cellDivisions = 5;
         const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
         
