@@ -720,16 +720,15 @@
             gameState = 'gameOver';
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             cancelAnimationFrame(gameLoop);
-            stopBGM();
+            stopAllBGM();
             playGameOverBGM();
 
             // ハイスコアかチェック
             if (db) {
                 await fetchHighScores();
                 
-                // ★★★ 変更点: ハイスコア判定ロジックを修正 ★★★
                 if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
-                    // ランキングが5位まで埋まっていない、または5位のスコアより高ければハイスコア
+                    // ランキングが5位まで埋まっていなければ、または5位のスコアより高ければハイスコア
                     nameInputModal.style.display = 'flex';
                 } else {
                     drawGameOverScreen();
@@ -839,7 +838,6 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            // ★★★ 変更点: バージョンを1.00に更新 ★★★
             ctx.fillText('Ver. 1.00', canvas.width - 10, canvas.height - 10);
         }
 
@@ -905,12 +903,16 @@
             document.body.addEventListener('touchend', unlock, { once: true });
         }
 
-        function playBGM() { if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function stopBGM() { if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; } }
-        function playTitleBGM() { if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function stopTitleBGM() { if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; } }
-        function playGameOverBGM() { if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function stopGameOverBGM() { if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; } }
+        // ★★★ 変更点: 全てのBGMを停止する関数を追加 ★★★
+        function stopAllBGM() {
+            if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
+            if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; }
+            if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; }
+        }
+
+        function playBGM() { stopAllBGM(); if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playTitleBGM() { stopAllBGM(); if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playGameOverBGM() { stopAllBGM(); if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.play().catch(e => {}); } catch (e) {} } }
         
         /**
          * ヨガ画像を読み込む
@@ -1052,8 +1054,6 @@
             gameState = 'playing';
             if (pauseButtonElement) pauseButtonElement.style.display = 'block';
             
-            stopTitleBGM();
-            stopGameOverBGM();
             playBGM();
             
             update();
@@ -1156,8 +1156,6 @@
                         pleaseTapAnimation = null;
                     }
                     gameState = 'title';
-                    stopBGM();
-                    stopGameOverBGM();
                     playTitleBGM();
                     drawTitleScreen();
                     break;
@@ -1177,7 +1175,6 @@
                     break;
                 case 'gameOver':
                     gameState = 'title';
-                    stopGameOverBGM();
                     playTitleBGM();
                     drawTitleScreen();
                     break;
@@ -1205,14 +1202,14 @@
         function togglePause() {
             if (gameState === 'playing') {
                 gameState = 'paused';
-                stopBGM();
+                stopAllBGM();
                 cancelAnimationFrame(gameLoop);
                 drawPauseScreen();
             }
         }
         
         function resumeGame() {
-            if (gameState === 'playing') {
+            if (gameState === 'paused') {
                 gameState = 'playing';
                 playBGM();
                 update();
