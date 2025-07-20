@@ -94,6 +94,46 @@
             z-index: 20;
             transition: all 0.1s ease-out;
         }
+        
+        /* 名前入力モーダルのスタイル */
+        #nameInputModal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 30;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            font-size: 18px;
+        }
+        #nameInputModal div {
+            background-color: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #2c5aa0;
+            text-align: center;
+        }
+        #nameInputModal input {
+            font-size: 18px;
+            padding: 5px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        #nameInputModal button {
+            font-size: 16px;
+            padding: 8px 15px;
+            border-radius: 5px;
+            border: none;
+            background-color: #2c5aa0;
+            color: white;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -104,12 +144,40 @@
         <div id="comboDisplay"></div>
     </div>
 
-    <script>
+    <!-- 名前入力用モーダル -->
+    <div id="nameInputModal">
+        <div>
+            <p>ハイスコア！名前を入力してください:</p>
+            <input type="text" id="playerNameInput" maxlength="10" placeholder="なまえ">
+            <button id="submitScoreButton">登録</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase SDKのインポート
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // あなたのウェブアプリのFirebase設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyBFtXrjCLDENnj0uC5mF6V-wDuPbO9T2oc",
+            authDomain: "soul-8d8b7.firebaseapp.com",
+            projectId: "soul-8d8b7",
+            storageBucket: "soul-8d8b7.firebasestorage.app",
+            messagingSenderId: "547048279726",
+            appId: "1:547048279726:web:d1a67c7a8eb060f8b1273f",
+            measurementId: "G-MZLS3H66X8"
+        };
+        
         // Canvas要素とコンテキストの取得
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreDisplayElement = document.getElementById('scoreDisplay');
         const comboDisplayElement = document.getElementById('comboDisplay');
+        const nameInputModal = document.getElementById('nameInputModal');
+        const playerNameInput = document.getElementById('playerNameInput');
+        const submitScoreButton = document.getElementById('submitScoreButton');
         let pauseButtonElement;
 
         // ゲーム設定
@@ -160,7 +228,75 @@
         let gameoverBgmAudio = null;
         let titleBgmAudio = null;
         let pleaseTapAnimation = null;
+        
+        // Firebase関連の変数
+        let db;
+        let auth;
+        let highScores = [];
 
+        /**
+         * Firebaseの初期化と認証
+         */
+        async function initFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // 匿名でサインイン
+                await signInAnonymously(auth);
+                console.log('Firebase initialized and signed in anonymously.');
+            } catch (error) {
+                console.error("Firebaseの初期化に失敗しました:", error);
+                // Firebaseがなくてもゲームが動くようにする
+                db = null; 
+            }
+        }
+
+        /**
+         * ハイスコアをFirestoreに保存する
+         */
+        async function saveHighScore(playerName, finalScore, finalMaxCombo) {
+            if (!db) return;
+            try {
+                await addDoc(collection(db, "scores"), {
+                    name: playerName,
+                    score: finalScore,
+                    maxCombo: finalMaxCombo,
+                    createdAt: new Date()
+                });
+                console.log("ハイスコアを保存しました。");
+            } catch (error) {
+                console.error("ハイスコアの保存に失敗しました: ", error);
+            }
+        }
+
+        /**
+         * Firestoreからハイスコアを取得する
+         */
+        async function fetchHighScores() {
+            if (!db) {
+                highScores = [];
+                return;
+            }
+            
+            try {
+                const q = query(collection(db, "scores"));
+                const querySnapshot = await getDocs(q);
+                const scores = [];
+                querySnapshot.forEach((doc) => {
+                    scores.push(doc.data());
+                });
+
+                scores.sort((a, b) => b.score - a.score);
+                highScores = scores.slice(0, 5);
+
+            } catch (error) {
+                console.error("ハイスコアの取得に失敗しました: ", error);
+                highScores = [];
+            }
+        }
+        
         /**
          * キャンバスサイズを画面に合わせてリサイズする
          */
@@ -168,14 +304,12 @@
             const containerWidth = window.innerWidth;
             const containerHeight = window.innerHeight;
 
-            // UI要素のサイズとマージンを定義
             const scoreDisplayHeight = 30;
             const pauseButtonHeight = 32;
             const pauseButtonMargin = 5;
             const scoreCanvasMargin = 10;
             const topPageMargin = 15;
 
-            // UIとキャンバスを合わせた全体の高さを計算するために、まずキャンバスの高さを仮計算する
             const tempAvailableHeight = containerHeight - (topPageMargin + pauseButtonHeight + pauseButtonMargin + scoreDisplayHeight + scoreCanvasMargin);
             const nextPieceWidth = Math.ceil(gridWidth * 0.4);
             const aspectRatio = (gridWidth + nextPieceWidth) / gridHeight;
@@ -192,23 +326,18 @@
             let tempCellSize = Math.floor(Math.min(tempNewWidth / (gridWidth + nextPieceWidth), tempNewHeight / gridHeight));
             const calculatedCanvasHeight = tempCellSize * gridHeight;
 
-            // UIとキャンバスを含むコンテンツ全体の高さを計算
             const totalContentHeight = calculatedCanvasHeight + scoreCanvasMargin + scoreDisplayHeight + pauseButtonMargin + pauseButtonHeight;
             
-            // コンテンツ全体を中央に配置するための開始Y座標を計算
             let startY = (containerHeight - totalContentHeight) / 2;
             
-            // ページ上部マージンを確保
             if (startY < topPageMargin) {
                 startY = topPageMargin;
             }
 
-            // 各要素の最終的なTop位置を決定
             const pauseTop = startY;
             const scoreTop = pauseTop + pauseButtonHeight + pauseButtonMargin;
             const canvasTop = scoreTop + scoreDisplayHeight + scoreCanvasMargin;
             
-            // 最終的なキャンバスのサイズを計算
             const availableCanvasHeight = containerHeight - canvasTop;
             let newWidth, newHeight;
              if (containerWidth / availableCanvasHeight > aspectRatio) {
@@ -227,7 +356,6 @@
             canvas.style.width = `${canvas.width}px`;
             canvas.style.height = `${canvas.height}px`;
 
-            // 各要素の位置を設定
             const canvasLeft = (containerWidth - canvas.width) / 2;
             canvas.style.position = 'absolute';
             canvas.style.left = `${canvasLeft}px`;
@@ -267,17 +395,11 @@
          */
         function drawGrid() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 砂漠の背景を描画 (for the right side 'NEXT' area)
             drawDesertBackground();
-            
-            // ゲームエリアの背景を水色で描画
             const gameAreaWidth = cellSize * gridWidth;
             const gameAreaHeight = canvas.height;
-            ctx.fillStyle = '#add8e6'; // Light Blue
+            ctx.fillStyle = '#add8e6';
             ctx.fillRect(0, 0, gameAreaWidth, gameAreaHeight);
-
-            // 砂粒子を描画
             for (const particle of sandParticles) {
                 ctx.fillStyle = colors[particle.color];
                 ctx.fillRect(particle.x * sandSize, particle.y * sandSize, sandSize, sandSize);
@@ -291,13 +413,10 @@
             const gameAreaWidth = cellSize * gridWidth;
             const nextAreaX = gameAreaWidth;
             const nextAreaWidth = canvas.width - gameAreaWidth;
-            
-            // 右側全体の基本砂漠背景
             const gradient = ctx.createLinearGradient(nextAreaX, 0, canvas.width, 0);
-            gradient.addColorStop(0, '#f4a460'); // サンディブラウン
-            gradient.addColorStop(0.5, '#daa520'); // ゴールデンロッド
-            gradient.addColorStop(1, '#cd853f'); // ペルー
-            
+            gradient.addColorStop(0, '#f4a460');
+            gradient.addColorStop(0.5, '#daa520');
+            gradient.addColorStop(1, '#cd853f');
             ctx.fillStyle = gradient;
             ctx.fillRect(nextAreaX, 0, nextAreaWidth, canvas.height);
         }
@@ -332,11 +451,9 @@
             const nextPieceX = cellSize * gridWidth + (nextPieceAreaWidth - nextPieceSize * 4) / 2;
             const nextPieceY = NEXT_PIECE_PADDING * 2 + 20;
 
-            // 次のピースエリアの背景
             ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
             ctx.fillRect(cellSize * gridWidth, 0, nextPieceAreaWidth, canvas.height);
 
-            // 境界線を描画
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -344,17 +461,14 @@
             ctx.lineTo(cellSize * gridWidth, canvas.height);
             ctx.stroke();
 
-            // "NEXT"ラベルを描画
             ctx.fillStyle = 'white';
             ctx.font = '20px Arial';
             ctx.textAlign = 'center';
             ctx.fillText(NEXT_PIECE_LABEL, cellSize * gridWidth + nextPieceAreaWidth / 2, NEXT_PIECE_PADDING + 20);
 
-            // 次のピースの背景
             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.fillRect(nextPieceX, nextPieceY, nextPieceSize * 4, nextPieceSize * 4);
 
-            // 次のピースを描画
             ctx.fillStyle = colors[nextPiece.color];
             for (let y = 0; y < nextPiece.shape.length; y++) {
                 for (let x = 0; x < nextPiece.shape[y].length; x++) {
@@ -507,13 +621,13 @@
                 const multiplier = Math.pow(1.5, combo - 1).toFixed(2);
                 displayText = `${combo} コンボ! (x${multiplier})`;
                 comboDisplayElement.style.fontSize = '28px';
-                comboDisplayElement.style.color = '#FFD700'; // Gold for combos
+                comboDisplayElement.style.color = '#FFD700';
             } else if (combo === 1) {
                 displayText = `+${points}`;
                 comboDisplayElement.style.fontSize = '22px';
-                comboDisplayElement.style.color = '#FFFFFF'; // White for single clear
+                comboDisplayElement.style.color = '#FFFFFF';
             } else {
-                return; // コンボがない場合は何もしない
+                return;
             }
             
             comboDisplayElement.textContent = displayText;
@@ -549,7 +663,7 @@
                 comboCount++;
                 const comboScore = calculateComboScore(comboCount, clearedLines);
                 score += comboScore;
-                showComboDisplay(comboCount, comboScore); // スコアを渡すように変更
+                showComboDisplay(comboCount, comboScore);
                 maxCombo = Math.max(maxCombo, comboCount);
             }
             
@@ -602,13 +716,27 @@
         /**
          * ゲームオーバー処理
          */
-        function gameOver() {
+        async function gameOver() {
             gameState = 'gameOver';
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             cancelAnimationFrame(gameLoop);
-            stopBGM(); // ゲーム中のBGMを停止
-            playGameOverBGM(); // ゲームオーバー用BGMを再生
-            drawGameOverScreen();
+            stopBGM();
+            playGameOverBGM();
+
+            // ハイスコアかチェック
+            if (db) {
+                await fetchHighScores();
+                
+                // ★★★ 変更点: ハイスコア判定ロジックを修正 ★★★
+                if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
+                    // ランキングが5位まで埋まっていない、または5位のスコアより高ければハイスコア
+                    nameInputModal.style.display = 'flex';
+                } else {
+                    drawGameOverScreen();
+                }
+            } else {
+                drawGameOverScreen();
+            }
         }
 
         /**
@@ -625,34 +753,26 @@
          * Please Tap画面を描画する
          */
         function drawPleaseTapScreen() {
-            // 黒い背景
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // 点滅効果の計算（1秒周期）
             const time = Date.now();
-            const blinkCycle = (time % 1000) / 1000; // 0から1の範囲
-            const opacity = 0.3 + 0.7 * Math.abs(Math.sin(blinkCycle * Math.PI)); // 0.3から1.0の範囲で点滅
-            
-            // 画面サイズに応じてフォントサイズを調整
+            const blinkCycle = (time % 1000) / 1000;
+            const opacity = 0.3 + 0.7 * Math.abs(Math.sin(blinkCycle * Math.PI));
             const isSmallScreen = canvas.height < 600;
             const pleaseTapFontSize = isSmallScreen ? 28 : 36;
             const pwaNoteFontSize = isSmallScreen ? 11 : 13;
             const creditFontSize = isSmallScreen ? 12 : 14;
             
-            // Please Tapテキスト（点滅）
             ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
             ctx.font = `bold ${pleaseTapFontSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.fillText('Please Tap', canvas.width / 2, canvas.height / 2 - 20);
             
-            // PWA案内（中央下）
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.font = `${pwaNoteFontSize}px Arial`;
             const pwaY = canvas.height / 2 + 60;
             ctx.fillText('※ホーム画面に追加でこのゲームをアプリ化', canvas.width / 2, pwaY);
             
-            // クレジット表記（画面下部）
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.font = `${creditFontSize}px Arial`;
             const creditY = canvas.height - (isSmallScreen ? 20 : 30);
@@ -663,7 +783,6 @@
          * タイトル画面を描画する
          */
         function drawTitleScreen() {
-            // 背景グラデーション
             const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
             gradient.addColorStop(0, '#2c5aa0');
             gradient.addColorStop(0.5, '#5b3a8f');
@@ -671,18 +790,14 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 星を描画
             ctx.fillStyle = 'white';
             for (let i = 0; i < 20; i++) {
                 const x = (i * 47) % canvas.width;
                 const y = (i * 23) % (canvas.height * 0.6);
                 ctx.fillRect(x, y, 2, 2);
             }
-
-            // ヨガ行者のドット絵を描画
             drawYogaMonk();
 
-            // 画面サイズに応じてフォントサイズを調整
             const isSmallScreen = canvas.height < 600;
             const titleFontSize = isSmallScreen ? 24 : 32;
             const subtitleFontSize = isSmallScreen ? 14 : 16;
@@ -691,7 +806,6 @@
             const versionFontSize = isSmallScreen ? 12 : 14;
             const pwaNoteFontSize = isSmallScreen ? 10 : 12;
 
-            // タイトルテキスト
             ctx.fillStyle = 'white';
             ctx.font = `bold ${titleFontSize}px Arial`;
             ctx.textAlign = 'center';
@@ -700,38 +814,33 @@
             ctx.strokeText('魂テトリス', canvas.width / 2, canvas.height * 0.15);
             ctx.fillText('魂テトリス', canvas.width / 2, canvas.height * 0.15);
 
-            // サブタイトル
             ctx.font = `${subtitleFontSize}px Arial`;
             ctx.fillStyle = '#cccccc';
             ctx.fillText('~ Soul Tetris ~', canvas.width / 2, canvas.height * 0.22);
 
-            // コンセプトメッセージ
             ctx.font = `${conceptFontSize}px Arial`;
-            ctx.fillStyle = '#ffd700'; // ゴールド色で神聖さを表現
+            ctx.fillStyle = '#ffd700';
             const conceptY = isSmallScreen ? canvas.height * 0.62 : canvas.height * 0.65;
             ctx.fillText('邪気を浄化して魂のステージを上げよう！', canvas.width / 2, conceptY);
 
-            // ハイスコアボタン
             drawHighScoreButton();
 
-            // ゲーム開始の説明（ボタンの下に配置）
             ctx.font = `${instructionFontSize}px Arial`;
             ctx.fillStyle = 'white';
             const instructionY = isSmallScreen ? canvas.height * 0.88 : canvas.height * 0.85;
             ctx.fillText('画面をタップしてゲーム開始', canvas.width / 2, instructionY);
 
-            // PWA案内とバージョン情報（画面下部）
             ctx.font = `${pwaNoteFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'center';
             const pwaY = canvas.height - (isSmallScreen ? 25 : 30);
             ctx.fillText('※ホーム画面に追加でこのゲームをアプリ化', canvas.width / 2, pwaY);
 
-            // バージョン情報（右下に配置）
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 0.55', canvas.width - 10, canvas.height - 10);
+            // ★★★ 変更点: バージョンを1.00に更新 ★★★
+            ctx.fillText('Ver. 1.00', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -744,14 +853,8 @@
                 bgmAudio.volume = 0.7;
                 bgmAudio.preload = 'auto';
                 bgmAudio.addEventListener('canplaythrough', () => console.log('BGMの読み込み完了'));
-                bgmAudio.addEventListener('error', (e) => {
-                    console.error('BGMの読み込みに失敗しました:', e);
-                    bgmAudio = null;
-                });
-            } catch (error) {
-                console.error('BGMの初期化に失敗しました:', error);
-                bgmAudio = null;
-            }
+                bgmAudio.addEventListener('error', (e) => { console.error('BGMの読み込みに失敗しました:', e); bgmAudio = null; });
+            } catch (error) { console.error('BGMの初期化に失敗しました:', error); bgmAudio = null; }
         }
 
         /**
@@ -764,14 +867,8 @@
                 gameoverBgmAudio.volume = 0.7;
                 gameoverBgmAudio.preload = 'auto';
                 gameoverBgmAudio.addEventListener('canplaythrough', () => console.log('ゲームオーバーBGMの読み込み完了'));
-                gameoverBgmAudio.addEventListener('error', (e) => {
-                    console.error('ゲームオーバーBGMの読み込みに失敗しました:', e);
-                    gameoverBgmAudio = null;
-                });
-            } catch (error) {
-                console.error('ゲームオーバーBGMの初期化に失敗しました:', error);
-                gameoverBgmAudio = null;
-            }
+                gameoverBgmAudio.addEventListener('error', (e) => { console.error('ゲームオーバーBGMの読み込みに失敗しました:', e); gameoverBgmAudio = null; });
+            } catch (error) { console.error('ゲームオーバーBGMの初期化に失敗しました:', error); gameoverBgmAudio = null; }
         }
 
         /**
@@ -784,14 +881,8 @@
                 titleBgmAudio.volume = 0.7;
                 titleBgmAudio.preload = 'auto';
                 titleBgmAudio.addEventListener('canplaythrough', () => console.log('タイトルBGMの読み込み完了'));
-                titleBgmAudio.addEventListener('error', (e) => {
-                    console.error('タイトルBGMの読み込みに失敗しました:', e);
-                    titleBgmAudio = null;
-                });
-            } catch (error) {
-                console.error('タイトルBGMの初期化に失敗しました:', error);
-                titleBgmAudio = null;
-            }
+                titleBgmAudio.addEventListener('error', (e) => { console.error('タイトルBGMの読み込みに失敗しました:', e); titleBgmAudio = null; });
+            } catch (error) { console.error('タイトルBGMの初期化に失敗しました:', error); titleBgmAudio = null; }
         }
         
         /**
@@ -802,128 +893,32 @@
             const unlock = () => {
                 if (unlocked) return;
                 unlocked = true;
-
-                // タイトルBGMは個別の再生ロジックで扱うため、ここでは除外
-                const audios = [bgmAudio, gameoverBgmAudio].filter(a => a);
+                const audios = [bgmAudio, gameoverBgmAudio, titleBgmAudio].filter(a => a);
                 audios.forEach(audio => {
-                    // Play and immediately pause each audio to unlock it.
                     const playPromise = audio.play();
                     if (playPromise !== undefined) {
-                        playPromise.then(() => {
-                            audio.pause();
-                            audio.currentTime = 0;
-                            console.log(`${audio.src.split('/').pop()} がアンロックされました`);
-                        }).catch(error => {
-                            // Autoplay was prevented. This is expected on some browsers.
-                            // The user interaction should allow future plays.
-                            console.warn(`${audio.src.split('/').pop()} のアンロックに失敗 (自動再生がブロックされました):`, error);
-                        });
+                        playPromise.then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
                     }
                 });
             };
-
-            // Unlock on the first user interaction.
             document.body.addEventListener('click', unlock, { once: true });
             document.body.addEventListener('touchend', unlock, { once: true });
         }
 
-        /**
-         * BGMを再生する
-         */
-        function playBGM() {
-            if (bgmAudio) {
-                try {
-                    bgmAudio.currentTime = 0;
-                    const playPromise = bgmAudio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(error => console.error('BGM再生に失敗しました:', error));
-                    }
-                } catch (error) {
-                    console.error('BGM再生エラー:', error);
-                }
-            }
-        }
-        
-        /**
-         * BGMを停止する
-         */
-        function stopBGM() {
-            if (bgmAudio && !bgmAudio.paused) {
-                bgmAudio.pause();
-                bgmAudio.currentTime = 0;
-            }
-        }
-
-        /**
-         * タイトルBGMを再生する
-         */
-        function playTitleBGM() {
-            if (titleBgmAudio) {
-                try {
-                    titleBgmAudio.currentTime = 0;
-                    const playPromise = titleBgmAudio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(error => console.error('タイトルBGMの再生に失敗:', error));
-                    }
-                } catch (error) {
-                    console.error('タイトルBGM再生エラー:', error);
-                }
-            }
-        }
-        
-        /**
-         * タイトルBGMを停止する
-         */
-        function stopTitleBGM() {
-            if (titleBgmAudio && !titleBgmAudio.paused) {
-                titleBgmAudio.pause();
-                titleBgmAudio.currentTime = 0;
-            }
-        }
-
-        /**
-         * ゲームオーバー用BGMを再生する
-         */
-        function playGameOverBGM() {
-            if (gameoverBgmAudio) {
-                try {
-                    gameoverBgmAudio.currentTime = 0;
-                    const playPromise = gameoverBgmAudio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(error => console.error('ゲームオーバーBGM再生に失敗しました:', error));
-                    }
-                } catch (error) {
-                    console.error('ゲームオーバーBGM再生エラー:', error);
-                }
-            }
-        }
-
-        /**
-         * ゲームオーバー用BGMを停止する
-         */
-        function stopGameOverBGM() {
-            if (gameoverBgmAudio && !gameoverBgmAudio.paused) {
-                gameoverBgmAudio.pause();
-                gameoverBgmAudio.currentTime = 0;
-            }
-        }
+        function playBGM() { if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function stopBGM() { if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; } }
+        function playTitleBGM() { if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function stopTitleBGM() { if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; } }
+        function playGameOverBGM() { if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function stopGameOverBGM() { if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; } }
         
         /**
          * ヨガ画像を読み込む
          */
         function loadYogaImage() {
             const img = new Image();
-            img.onload = () => {
-                yogaImage = img;
-                console.log('ヨガ画像の読み込み成功');
-                if (gameState === 'title') {
-                    drawTitleScreen();
-                }
-            };
-            img.onerror = () => {
-                console.error('ヨガ画像の読み込みに失敗しました');
-                yogaImage = null; // 画像がない場合でもエラーにならないようにする
-            };
+            img.onload = () => { yogaImage = img; if (gameState === 'title') { drawTitleScreen(); } };
+            img.onerror = () => { console.error('ヨガ画像の読み込みに失敗しました'); yogaImage = null; };
             img.src = 'yoga01.png';
         }
 
@@ -931,33 +926,21 @@
          * ヨガ行者の画像を描画する
          */
         function drawYogaMonk() {
-            if (!yogaImage) return; // 画像が読み込まれていない場合は何もしない
-
+            if (!yogaImage) return;
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
-            
             const maxImageWidth = canvas.width * 0.4;
             const maxImageHeight = canvas.height * 0.4;
-            
-            const scale = Math.min(
-                maxImageWidth / yogaImage.width,
-                maxImageHeight / yogaImage.height
-            );
-            
+            const scale = Math.min(maxImageWidth / yogaImage.width, maxImageHeight / yogaImage.height);
             const imageWidth = yogaImage.width * scale;
             const imageHeight = yogaImage.height * scale;
-            
             const imageX = centerX - imageWidth / 2;
             const imageY = centerY - imageHeight / 2 - 20;
-
-            // 光輪（オーラ）
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.arc(centerX, centerY - 20, Math.max(imageWidth, imageHeight) / 2 + 40, 0, Math.PI * 2);
             ctx.stroke();
-
-            // ヨガ行者の画像
             ctx.drawImage(yogaImage, imageX, imageY, imageWidth, imageHeight);
         }
 
@@ -986,23 +969,37 @@
         /**
          * ハイスコア画面を描画する
          */
-        function drawHighScoreScreen() {
+        function drawHighScoreScreen(isLoading = false) {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             ctx.fillStyle = 'white';
             ctx.font = '28px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('ハイスコア', canvas.width / 2, canvas.height * 0.3);
+            ctx.fillText('ハイスコア', canvas.width / 2, canvas.height * 0.2);
             
-            ctx.font = '20px Arial';
-            ctx.fillText('1位: 50,000', canvas.width / 2, canvas.height * 0.45);
-            ctx.fillText('2位: 35,000', canvas.width / 2, canvas.height * 0.52);
-            ctx.fillText('3位: 20,000', canvas.width / 2, canvas.height * 0.59);
-            ctx.fillText('4位: 15,000', canvas.width / 2, canvas.height * 0.66);
-            ctx.fillText('5位: 10,000', canvas.width / 2, canvas.height * 0.73);
+            if (isLoading) {
+                ctx.font = '20px Arial';
+                ctx.fillText('読み込み中...', canvas.width / 2, canvas.height / 2);
+            } else if (highScores.length === 0) {
+                ctx.font = '20px Arial';
+                ctx.fillText('まだスコアがありません', canvas.width / 2, canvas.height / 2);
+            } else {
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'left';
+                const startY = canvas.height * 0.35;
+                const lineHeight = 35;
+                highScores.forEach((s, i) => {
+                    const y = startY + i * lineHeight;
+                    ctx.fillText(`${i + 1}. ${s.name}`, canvas.width * 0.2, y);
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`${s.score}`, canvas.width * 0.8, y);
+                    ctx.textAlign = 'left';
+                });
+            }
             
             ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
             ctx.fillStyle = '#cccccc';
             ctx.fillText('画面をタップして戻る', canvas.width / 2, canvas.height * 0.85);
         }
@@ -1016,9 +1013,7 @@
             const buttonHeight = isSmallScreen ? 35 : 40;
             const buttonX = canvas.width / 2 - buttonWidth / 2;
             const buttonY = canvas.height * (isSmallScreen ? 0.70 : 0.75);
-            
-            return x >= buttonX && x <= buttonX + buttonWidth && 
-                   y >= buttonY && y <= buttonY + buttonHeight;
+            return x >= buttonX && x <= buttonX + buttonWidth && y >= buttonY && y <= buttonY + buttonHeight;
         }
 
         /**
@@ -1072,14 +1067,11 @@
 
             frameCount++;
             
-            // ピースの自動落下
             if (frameCount % Math.floor(fallSpeed) === 0 && !isSettling && !isClearing && currentPiece) {
                 if (canMove(0, 1)) {
                     currentPiece.y++;
-                    score++; // 通常落下で1行ごとに1点加算
+                    score++;
                     totalRows++;
-                    
-                    // スピードアップ
                     if (totalRows > 0 && totalRows % SPEED_INCREASE_INTERVAL === 0) {
                         fallSpeed *= SPEED_INCREASE_RATE;
                     }
@@ -1089,7 +1081,6 @@
                 }
             }
 
-            // 砂粒子の物理シミュレーション
             if (isSettling) {
                 if (!simulateSand()) {
                     isSettling = false;
@@ -1097,7 +1088,6 @@
                 }
             }
 
-            // ライン消去処理
             if (isClearing) {
                 const cleared = checkAndClearLines();
                 if (cleared) {
@@ -1107,7 +1097,7 @@
                     if (!currentPiece) {
                         currentPiece = nextPiece;
                         nextPiece = createPiece();
-                        comboCount = 0; // 新しいピースが生成されるときにコンボをリセット
+                        comboCount = 0;
                         if (!canMove(0, 0)) {
                             gameOver();
                             return;
@@ -1116,7 +1106,6 @@
                 }
             }
 
-            // 描画
             drawGrid();
             if (currentPiece && !isSettling && !isClearing) {
                 drawPiece();
@@ -1144,10 +1133,9 @@
                     rotate();
                     break;
                 case 'drop':
-                    // 自分で落下させた場合(ハードドロップ)は、1行ごとに2点加算する (通常落下は1点)
                     while (canMove(0, 1)) {
                         currentPiece.y++;
-                        score += 2; // ★変更点：通常落下の2倍のスコアを加算
+                        score += 2;
                         totalRows++;
                     }
                     mergePiece();
@@ -1159,7 +1147,7 @@
         /**
          * 画面タップ/クリックの共通処理
          */
-        function handleScreenTap(x, y) {
+        async function handleScreenTap(x, y) {
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             switch (gameState) {
                 case 'pleaseTap':
@@ -1176,7 +1164,9 @@
                 case 'title':
                     if (isHighScoreButtonTapped(x, y)) {
                         gameState = 'highscore';
-                        drawHighScoreScreen();
+                        drawHighScoreScreen(true); // ローディング表示
+                        await fetchHighScores();
+                        drawHighScoreScreen(false);
                     } else {
                         resetGame();
                     }
@@ -1198,17 +1188,13 @@
          * ポーズ画面を描画する
          */
         function drawPauseScreen() {
-            // ゲームエリアに黒いオーバーレイを描画してプレイ領域を隠す
-            ctx.fillStyle = '#000000'; // 完全な黒に変更
+            ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
-
-            // ポーズテキストを描画
             ctx.fillStyle = 'white';
             ctx.font = '30px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('PAUSED', (cellSize * gridWidth) / 2, canvas.height / 2 - 20);
-            
             ctx.font = '16px Arial';
             ctx.fillText('タップして再開', (cellSize * gridWidth) / 2, canvas.height / 2 + 20);
         }
@@ -1226,7 +1212,7 @@
         }
         
         function resumeGame() {
-            if (gameState === 'paused') {
+            if (gameState === 'playing') {
                 gameState = 'playing';
                 playBGM();
                 update();
@@ -1238,11 +1224,17 @@
          */
         function initEventListeners() {
             pauseButtonElement.addEventListener('click', (e) => {
-                e.stopPropagation(); // canvasのイベントが発火しないようにする
+                e.stopPropagation();
                 togglePause();
             });
 
-            // タッチ開始
+            submitScoreButton.addEventListener('click', async () => {
+                const playerName = playerNameInput.value.trim() || 'ななし';
+                await saveHighScore(playerName, score, maxCombo);
+                nameInputModal.style.display = 'none';
+                drawGameOverScreen();
+            });
+
             canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 if (gameState === 'playing') {
@@ -1254,47 +1246,38 @@
                 }
             }, { passive: false });
 
-            // タッチ移動
             canvas.addEventListener('touchmove', (e) => {
                 e.preventDefault();
                 if (gameState !== 'playing' || !isTouchHolding) return;
-
                 const touch = e.touches[0];
                 const deltaX = touch.clientX - touchStartX;
                 const deltaY = touch.clientY - touchStartY;
-
                 if (Math.abs(deltaX) > cellSize) {
                     handleTouch(deltaX > 0 ? 'right' : 'left');
                     touchStartX = touch.clientX;
                     touchStartY = touch.clientY;
                 }
-
                 if (deltaY > cellSize * 2) {
                     handleTouch('drop');
                     isTouchHolding = false;
                 }
             }, { passive: false });
 
-            // タッチ終了
             canvas.addEventListener('touchend', (e) => {
                 e.preventDefault();
-                
                 if (gameState === 'paused') {
                     resumeGame();
                     return;
                 }
-                
                 const touch = e.changedTouches[0];
                 const rect = canvas.getBoundingClientRect();
                 const x = touch.clientX - rect.left;
                 const y = touch.clientY - rect.top;
-
                 if (gameState === 'playing') {
                     const touchEndTime = Date.now();
                     const touchDuration = touchEndTime - touchStartTime;
                     const deltaX = touch.clientX - touchStartX;
                     const deltaY = touch.clientY - touchStartY;
-
                     if (touchDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && isTouchHolding) {
                         handleTouch('rotate');
                     }
@@ -1304,22 +1287,18 @@
                 }
             }, { passive: false });
 
-            // クリックイベント（デスクトップ用）
             canvas.addEventListener('click', (e) => {
                 e.preventDefault();
-                
                 if (gameState === 'paused') {
                     resumeGame();
                     return;
                 }
-
                 const rect = canvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
                 handleScreenTap(x, y);
             });
 
-            // ウィンドウリサイズ
             window.addEventListener('resize', () => {
                 resizeCanvas();
                 switch (gameState) {
@@ -1328,16 +1307,9 @@
                     case 'highscore': drawHighScoreScreen(); break;
                     case 'gameOver': drawGameOverScreen(); break;
                     case 'playing':
-                         drawGrid();
-                         if(currentPiece) drawPiece();
-                         if(nextPiece) drawNextPiece();
-                         break;
+                         drawGrid(); if(currentPiece) drawPiece(); if(nextPiece) drawNextPiece(); break;
                     case 'paused':
-                         drawGrid();
-                         if(currentPiece) drawPiece();
-                         if(nextPiece) drawNextPiece();
-                         drawPauseScreen();
-                         break;
+                         drawGrid(); if(currentPiece) drawPiece(); if(nextPiece) drawNextPiece(); drawPauseScreen(); break;
                 }
             });
         }
@@ -1345,7 +1317,7 @@
         /**
          * ゲームを初期化する
          */
-        function init() {
+        async function init() {
             pauseButtonElement = document.getElementById('pauseButton');
             resizeCanvas();
             loadBGM();
@@ -1354,7 +1326,9 @@
             loadYogaImage();
             
             initEventListeners();
-            unlockAudioFiles(); // ユーザーの最初の操作を待ってオーディオを有効にする
+            unlockAudioFiles();
+            
+            await initFirebase(); // Firebaseの初期化を待つ
             
             gameState = 'pleaseTap';
             animatePleaseTapScreen();
