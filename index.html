@@ -1189,8 +1189,8 @@
          * ポーズ画面を描画する
          */
         function drawPauseScreen() {
-            // ゲームエリアに半透明のオーバーレイを描画
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            // ゲームエリアに黒いオーバーレイを描画してプレイ領域を隠す
+            ctx.fillStyle = '#000000'; // 完全な黒に変更
             ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
 
             // ポーズテキストを描画
