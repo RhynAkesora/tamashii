@@ -112,8 +112,8 @@
         let pauseButtonElement;
 
         // ゲーム設定
-        const gridWidth = 9;   // 横幅を調整
-        const gridHeight = 19; // 縦幅を約1割長く
+        const gridWidth = 9;
+        const gridHeight = 19; 
         const cellDivisions = 5;
         const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
         
@@ -168,15 +168,55 @@
         function resizeCanvas() {
             const containerWidth = window.innerWidth;
             const containerHeight = window.innerHeight;
+
+            // UI要素のサイズとマージンを定義
+            const scoreDisplayHeight = 30;
+            const pauseButtonHeight = 32;
+            const pauseButtonMargin = 5;
+            const scoreCanvasMargin = 10;
+            const topPageMargin = 15;
+
+            // UIとキャンバスを合わせた全体の高さを計算するために、まずキャンバスの高さを仮計算する
+            const tempAvailableHeight = containerHeight - (topPageMargin + pauseButtonHeight + pauseButtonMargin + scoreDisplayHeight + scoreCanvasMargin);
             const nextPieceWidth = Math.ceil(gridWidth * 0.4);
             const aspectRatio = (gridWidth + nextPieceWidth) / gridHeight;
-            let newWidth, newHeight;
+            let tempNewWidth, tempNewHeight;
 
-            if (containerWidth / containerHeight > aspectRatio) {
-                newHeight = containerHeight * 0.8; // 画面の80%を使用してスコア表示の余裕を確保
+            if (containerWidth / tempAvailableHeight > aspectRatio) {
+                tempNewHeight = tempAvailableHeight;
+                tempNewWidth = tempNewHeight * aspectRatio;
+            } else {
+                tempNewWidth = containerWidth * 0.95;
+                tempNewHeight = tempNewWidth / aspectRatio;
+            }
+            
+            let tempCellSize = Math.floor(Math.min(tempNewWidth / (gridWidth + nextPieceWidth), tempNewHeight / gridHeight));
+            const calculatedCanvasHeight = tempCellSize * gridHeight;
+
+            // UIとキャンバスを含むコンテンツ全体の高さを計算
+            const totalContentHeight = calculatedCanvasHeight + scoreCanvasMargin + scoreDisplayHeight + pauseButtonMargin + pauseButtonHeight;
+            
+            // コンテンツ全体を中央に配置するための開始Y座標を計算
+            let startY = (containerHeight - totalContentHeight) / 2;
+            
+            // ページ上部マージンを確保
+            if (startY < topPageMargin) {
+                startY = topPageMargin;
+            }
+
+            // 各要素の最終的なTop位置を決定
+            const pauseTop = startY;
+            const scoreTop = pauseTop + pauseButtonHeight + pauseButtonMargin;
+            const canvasTop = scoreTop + scoreDisplayHeight + scoreCanvasMargin;
+            
+            // 最終的なキャンバスのサイズを計算
+            const availableCanvasHeight = containerHeight - canvasTop;
+            let newWidth, newHeight;
+             if (containerWidth / availableCanvasHeight > aspectRatio) {
+                newHeight = availableCanvasHeight;
                 newWidth = newHeight * aspectRatio;
             } else {
-                newWidth = containerWidth * 0.95; // 左右に少し余裕を持たせる
+                newWidth = containerWidth * 0.95;
                 newHeight = newWidth / aspectRatio;
             }
 
@@ -188,36 +228,23 @@
             canvas.style.width = `${canvas.width}px`;
             canvas.style.height = `${canvas.height}px`;
 
+            // 各要素の位置を設定
             const canvasLeft = (containerWidth - canvas.width) / 2;
-            const canvasTop = (containerHeight - canvas.height) / 2;
-
             canvas.style.position = 'absolute';
             canvas.style.left = `${canvasLeft}px`;
             canvas.style.top = `${canvasTop}px`;
 
-            // スコア表示とポーズボタンの基準となる位置を計算
             const scoreDisplay = document.getElementById('scoreDisplay');
             const scoreWidth = Math.min(canvas.width, containerWidth * 0.9);
             const scoreLeft = (containerWidth - scoreWidth) / 2;
-            // ボタンを置くスペースを確保するため、最小topを増やす
-            const scoreTop = Math.max(50, canvasTop - 40);
-
-            // スコア表示の位置を設定
             scoreDisplay.style.width = `${scoreWidth}px`;
             scoreDisplay.style.left = `${scoreLeft}px`;
             scoreDisplay.style.top = `${scoreTop}px`;
 
-            // ポーズボタンをスコア表示の右上に配置
             if (pauseButtonElement) {
-                const buttonWidth = 80; // from CSS
-                const buttonHeight = 32; // from CSS
-                const buttonMargin = 5; 
-
-                // 縦位置：スコア表示の上
-                pauseButtonElement.style.top = `${scoreTop - buttonHeight - buttonMargin}px`;
-
-                // 横位置：スコア表示の右端に合わせる
+                const buttonWidth = 80;
                 const scoreRight = scoreLeft + scoreWidth;
+                pauseButtonElement.style.top = `${pauseTop}px`;
                 pauseButtonElement.style.left = `${scoreRight - buttonWidth}px`;
             }
         }
