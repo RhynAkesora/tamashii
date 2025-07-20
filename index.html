@@ -1076,7 +1076,7 @@
             if (frameCount % Math.floor(fallSpeed) === 0 && !isSettling && !isClearing && currentPiece) {
                 if (canMove(0, 1)) {
                     currentPiece.y++;
-                    score++;
+                    score++; // 通常落下で1行ごとに1点加算
                     totalRows++;
                     
                     // スピードアップ
@@ -1144,9 +1144,10 @@
                     rotate();
                     break;
                 case 'drop':
+                    // 自分で落下させた場合(ハードドロップ)は、1行ごとに2点加算する (通常落下は1点)
                     while (canMove(0, 1)) {
                         currentPiece.y++;
-                        score++;
+                        score += 2; // ★変更点：通常落下の2倍のスコアを加算
                         totalRows++;
                     }
                     mergePiece();
