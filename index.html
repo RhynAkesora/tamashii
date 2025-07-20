@@ -163,85 +163,64 @@
         let pleaseTapAnimation = null;
 
         /**
-         * キャンバスサイズを画面に合わせてリサイズし、UI要素を配置する
+         * キャンバスサイズを画面に合わせてリサイズする
          */
         function resizeCanvas() {
             const containerWidth = window.innerWidth;
             const containerHeight = window.innerHeight;
+            const nextPieceWidth = Math.ceil(gridWidth * 0.4);
+            const aspectRatio = (gridWidth + nextPieceWidth) / gridHeight;
+            let newWidth, newHeight;
 
-            // --- UI要素の寸法とマージンを定義 ---
-            const pauseButtonHeight = 32;
-            const topMargin = 10; // 画面上部のマージン
-            const pauseScoreMargin = 5;
-            const scoreDisplayHeight = 30;
-            const scoreCanvasMargin = 10;
-
-            // キャンバスより上に配置されるUI要素の合計の高さ
-            const topUiTotalHeight = topMargin + pauseButtonHeight + pauseScoreMargin + scoreDisplayHeight + scoreCanvasMargin;
-
-            // --- キャンバスのサイズを計算 ---
-            const nextPieceAreaWidthRatio = 0.5; // NEXTエリアの幅を競技エリアの幅の50%とする
-            const canvasAspectRatio = (gridWidth + (gridWidth * nextPieceAreaWidthRatio)) / gridHeight;
-            
-            // UI要素の高さを除いた、キャンバスが使用できる残りのスペース
-            const availableHeight = containerHeight - topUiTotalHeight;
-            const availableWidth = containerWidth;
-
-            let canvasRenderWidth, canvasRenderHeight;
-
-            // アスペクト比を基に、利用可能な幅と高さからキャンバスの最大サイズを決定
-            if (availableWidth / availableHeight > canvasAspectRatio) {
-                // 高さが制限要因
-                canvasRenderHeight = availableHeight;
-                canvasRenderWidth = canvasRenderHeight * canvasAspectRatio;
+            if (containerWidth / containerHeight > aspectRatio) {
+                newHeight = containerHeight * 0.8; // 画面の80%を使用してスコア表示の余裕を確保
+                newWidth = newHeight * aspectRatio;
             } else {
-                // 幅が制限要因
-                canvasRenderWidth = availableWidth * 0.95; // 左右に少し余白を持たせる
-                canvasRenderHeight = canvasRenderWidth / canvasAspectRatio;
+                newWidth = containerWidth * 0.95; // 左右に少し余裕を持たせる
+                newHeight = newWidth / aspectRatio;
             }
 
-            // セルサイズを計算
-            cellSize = Math.floor(canvasRenderWidth / (gridWidth + (gridWidth * nextPieceAreaWidthRatio)));
-            
-            // canvasの内部解像度を設定
-            canvas.width = cellSize * (gridWidth + Math.ceil(gridWidth * nextPieceAreaWidthRatio));
+            cellSize = Math.floor(Math.min(newWidth / (gridWidth + nextPieceWidth), newHeight / gridHeight));
+            sandSize = cellSize / cellDivisions;
+            canvas.width = cellSize * (gridWidth + nextPieceWidth);
             canvas.height = cellSize * gridHeight;
-            
-            // canvasの表示サイズ(CSS)を設定
+
             canvas.style.width = `${canvas.width}px`;
             canvas.style.height = `${canvas.height}px`;
 
-            // --- すべての要素を配置 ---
-            const totalBlockHeight = topUiTotalHeight + canvas.height;
-            const verticalOffset = (containerHeight - totalBlockHeight) / 2; // ブロック全体を垂直中央に配置
-            const horizontalOffset = (containerWidth - canvas.width) / 2; // ブロック全体を水平中央に配置
+            const canvasLeft = (containerWidth - canvas.width) / 2;
+            const canvasTop = (containerHeight - canvas.height) / 2;
 
-            // ポーズボタンを配置
-            const pauseButtonTop = verticalOffset + topMargin;
+            canvas.style.position = 'absolute';
+            canvas.style.left = `${canvasLeft}px`;
+            canvas.style.top = `${canvasTop}px`;
+
+            // スコア表示とポーズボタンの基準となる位置を計算
+            const scoreDisplay = document.getElementById('scoreDisplay');
             const scoreWidth = Math.min(canvas.width, containerWidth * 0.9);
             const scoreLeft = (containerWidth - scoreWidth) / 2;
-            const scoreRight = scoreLeft + scoreWidth;
-            if (pauseButtonElement) {
-                pauseButtonElement.style.position = 'absolute';
-                pauseButtonElement.style.top = `${pauseButtonTop}px`;
-                pauseButtonElement.style.left = `${scoreRight - 80}px`; // 80はボタンの幅
-            }
+            // ボタンを置くスペースを確保するため、最小topを増やす
+            const scoreTop = Math.max(50, canvasTop - 40);
 
-            // スコア表示を配置
-            const scoreTop = pauseButtonTop + pauseButtonHeight + pauseScoreMargin;
-            const scoreDisplay = document.getElementById('scoreDisplay');
-            scoreDisplay.style.position = 'absolute';
+            // スコア表示の位置を設定
             scoreDisplay.style.width = `${scoreWidth}px`;
             scoreDisplay.style.left = `${scoreLeft}px`;
             scoreDisplay.style.top = `${scoreTop}px`;
 
-            // キャンバスを配置
-            const canvasTop = scoreTop + scoreDisplayHeight + scoreCanvasMargin;
-            canvas.style.position = 'absolute';
-            canvas.style.left = `${horizontalOffset}px`;
-            canvas.style.top = `${canvasTop}px`;
-        }
+            // ポーズボタンをスコア表示の右上に配置
+            if (pauseButtonElement) {
+                const buttonWidth = 80; // from CSS
+                const buttonHeight = 32; // from CSS
+                const buttonMargin = 5; 
 
+                // 縦位置：スコア表示の上
+                pauseButtonElement.style.top = `${scoreTop - buttonHeight - buttonMargin}px`;
+
+                // 横位置：スコア表示の右端に合わせる
+                const scoreRight = scoreLeft + scoreWidth;
+                pauseButtonElement.style.left = `${scoreRight - buttonWidth}px`;
+            }
+        }
 
         /**
          * 新しいテトリスピースを作成する
