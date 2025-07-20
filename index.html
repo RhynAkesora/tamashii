@@ -883,27 +883,7 @@
             } catch (error) { console.error('タイトルBGMの初期化に失敗しました:', error); titleBgmAudio = null; }
         }
         
-        /**
-         * ブラウザの音声再生制限を解除する
-         */
-        function unlockAudioFiles() {
-            let unlocked = false;
-            const unlock = () => {
-                if (unlocked) return;
-                unlocked = true;
-                const audios = [bgmAudio, gameoverBgmAudio, titleBgmAudio].filter(a => a);
-                audios.forEach(audio => {
-                    const playPromise = audio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
-                    }
-                });
-            };
-            document.body.addEventListener('click', unlock, { once: true });
-            document.body.addEventListener('touchend', unlock, { once: true });
-        }
-
-        // ★★★ 変更点: 全てのBGMを停止する関数を追加 ★★★
+        // ★★★ 変更点: BGM管理ロジックを修正 ★★★
         function stopAllBGM() {
             if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
             if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; }
@@ -1209,7 +1189,7 @@
         }
         
         function resumeGame() {
-            if (gameState === 'paused') {
+            if (gameState === 'playing') {
                 gameState = 'playing';
                 playBGM();
                 update();
@@ -1323,7 +1303,6 @@
             loadYogaImage();
             
             initEventListeners();
-            unlockAudioFiles();
             
             await initFirebase(); // Firebaseの初期化を待つ
             
