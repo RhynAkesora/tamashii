@@ -164,8 +164,9 @@
 
     <script type="module">
         // Firebase SDKのインポート
+        // ★★★ 修正点: Firebaseのインポートを元に戻しました ★★★
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // Canvas要素とコンテキストの取得
@@ -231,6 +232,7 @@
         // オーディオ関連の変数
         let audioCtx;
         let soundsEnabled = false;
+        let masterGain = null;
 
         // エフェクト関連の変数
         let visualEffects = [];
@@ -242,13 +244,24 @@
         let auth;
         let highScores = [];
 
-        /**
-         * ユーザーの最初の操作でオーディオ機能を有効化する
-         */
+        // ★★★ 修正点: Firebaseの設定を元に戻しました ★★★
+        const firebaseConfig = {
+            apiKey: "AIzaSyBFtXrjCLDENnj0uC5mF6V-wDuPbO9T2oc",
+            authDomain: "soul-8d8b7.firebaseapp.com",
+            projectId: "soul-8d8b7",
+            storageBucket: "soul-8d8b7.appspot.com",
+            messagingSenderId: "547048279726",
+            appId: "1:547048279726:web:d1a67c7a8eb060f8b1273f",
+            measurementId: "G-MZLS3H66X8"
+        };
+        
         function initAudio() {
             if (!audioCtx) {
                 try {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    masterGain = audioCtx.createGain();
+                    masterGain.gain.value = 0.7; 
+                    masterGain.connect(audioCtx.destination);
                     soundsEnabled = true;
                     console.log("AudioContextが正常に初期化されました。");
                 } catch (e) {
@@ -261,17 +274,17 @@
         
         function playMoveSound() {
             if (!soundsEnabled || !audioCtx) return;
-            playSound({ frequency: 220, type: 'square', duration: 0.05, volume: 0.08 });
+            playSound({ frequency: 220, type: 'square', duration: 0.05, volume: 0.15 });
         }
 
         function playRotateSound() {
             if (!soundsEnabled || !audioCtx) return;
-            playSound({ frequency: 330, type: 'triangle', duration: 0.08, volume: 0.12 });
+            playSound({ frequency: 330, type: 'triangle', duration: 0.08, volume: 0.2 });
         }
 
         function playDropSound() {
             if (!soundsEnabled || !audioCtx) return;
-            playSound({ frequency: 400, type: 'sawtooth', duration: 0.15, volume: 0.15, sweep: -200 });
+            playSound({ frequency: 400, type: 'sawtooth', duration: 0.15, volume: 0.3, sweep: -200 });
         }
         
         function playLandSound() {
@@ -293,25 +306,19 @@
             filter.frequency.exponentialRampToValueAtTime(100, now + 0.08);
 
             const gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(0.2, now);
+            gainNode.gain.setValueAtTime(0.4, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
-            noiseSource.connect(filter).connect(gainNode).connect(audioCtx.destination);
+            noiseSource.connect(filter).connect(gainNode).connect(masterGain);
             noiseSource.start(now);
         }
 
-        /**
-         * ★★★ ブロック消去時の効果音 ★★★
-         * よりクリアで爽快感のある効果音に変更
-         * コンボ数に応じて音の高さが変化
-         */
         function playClearSound(currentCombo) {
             if (!soundsEnabled || !audioCtx) return;
             const now = audioCtx.currentTime;
 
-            // ホワイトノイズを生成
             const noiseSource = audioCtx.createBufferSource();
-            const bufferSize = audioCtx.sampleRate * 0.2; // 0.2秒のノイズ
+            const bufferSize = audioCtx.sampleRate * 0.2;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
@@ -319,23 +326,19 @@
             }
             noiseSource.buffer = buffer;
 
-            // フィルターでノイズを整形
             const filter = audioCtx.createBiquadFilter();
             filter.type = 'bandpass';
-            const baseFreq = 800 + (currentCombo * 150); // コンボが多いほど高音に
+            const baseFreq = 800 + (currentCombo * 150);
             filter.frequency.setValueAtTime(baseFreq, now);
             filter.Q.setValueAtTime(10, now);
             filter.frequency.exponentialRampToValueAtTime(baseFreq * 3, now + 0.15);
 
-            // ゲインノードで音量を制御
             const gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(0.2, now);
+            gainNode.gain.setValueAtTime(0.35, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
-            // ノードを接続
-            noiseSource.connect(filter).connect(gainNode).connect(audioCtx.destination);
+            noiseSource.connect(filter).connect(gainNode).connect(masterGain);
 
-            // サウンドを再生
             noiseSource.start(now);
         }
 
@@ -351,10 +354,10 @@
                 osc.frequency.exponentialRampToValueAtTime(freq / 2, now + 1.2);
 
                 const gainNode = audioCtx.createGain();
-                gainNode.gain.setValueAtTime(0.15, now);
+                gainNode.gain.setValueAtTime(0.3, now);
                 gainNode.gain.linearRampToValueAtTime(0, now + 1.2);
 
-                osc.connect(gainNode).connect(audioCtx.destination);
+                osc.connect(gainNode).connect(masterGain);
                 osc.start(now);
                 osc.stop(now + 1.2);
             });
@@ -373,7 +376,7 @@
             gainNode.gain.setValueAtTime(volume, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
             oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            gainNode.connect(masterGain);
             oscillator.start(now);
             oscillator.stop(now + duration);
         }
@@ -434,39 +437,19 @@
 
 
         /**
-         * Firebase設定と認証方法
+         * ★★★ 修正点: Firebaseの初期化処理を元に戻しました ★★★
          */
         async function initFirebase() {
             try {
-                // 環境変数からFirebase設定を読み込む。未定義の場合はフォールバック
-                const firebaseConfig = typeof __firebase_config !== 'undefined'
-                    ? JSON.parse(__firebase_config)
-                    : {
-                        // この部分はローカルテスト用のダミーです。
-                        // 実際のAPIキーなどをここにハードコードしないでください。
-                        apiKey: "YOUR_API_KEY",
-                        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-                        projectId: "YOUR_PROJECT_ID",
-                        storageBucket: "YOUR_PROJECT_ID.appspot.com",
-                        messagingSenderId: "YOUR_SENDER_ID",
-                        appId: "YOUR_APP_ID"
-                    };
-
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-
-                // カスタムトークンが利用可能な場合はそれを使用し、そうでなければ匿名認証にフォールバック
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                    console.log('Firebase initialized and signed in with custom token.');
-                } else {
-                    await signInAnonymously(auth);
-                    console.log('Firebase initialized and signed in anonymously.');
-                }
+                
+                await signInAnonymously(auth);
+                console.log('Firebase initialized and signed in anonymously.');
             } catch (error) {
                 console.error("Firebaseの初期化に失敗しました:", error);
-                db = null;
+                db = null; 
             }
         }
 
@@ -1070,7 +1053,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.16', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.18', canvas.width - 10, canvas.height - 10);
         }
 
         /**
