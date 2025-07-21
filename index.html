@@ -209,8 +209,8 @@
         // UI設定
         const NEXT_PIECE_PADDING = 10;
         const NEXT_PIECE_LABEL = 'NEXT';
-        const SPEED_INCREASE_RATE = 0.975; // ★★★ 変更点: 速度上昇率を再調整 ★★★
-        const SPEED_INCREASE_INTERVAL = 5; // ★★★ 変更点: 5ライン消すごとに速度上昇 ★★★
+        const SPEED_INCREASE_RATE = 0.975;
+        const SPEED_INCREASE_INTERVAL = 5;
 
         // ゲーム変数
         let cellSize, sandSize;
@@ -224,7 +224,7 @@
         let isClearing = false;
         let comboCount = 0;
         let maxCombo = 0;
-        let clearedLineInTurn = false;
+        // let clearedLineInTurn = false; // ★★★ 修正点: 不要なため削除 ★★★
         let gameState = 'pleaseTap';
         let comboDisplayTimeout;
         let touchStartX = 0;
@@ -542,6 +542,7 @@
             }
             currentPiece = null;
             isSettling = true;
+            comboCount = 0; // ★★★ 修正点: 連鎖カウントをリセット ★★★
         }
 
         /**
@@ -813,7 +814,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.04', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.05', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1010,7 +1011,7 @@
             score = 0;
             comboCount = 0;
             maxCombo = 0;
-            clearedLineInTurn = false;
+            // clearedLineInTurn = false; // ★★★ 修正点: 不要なため削除 ★★★
             totalLinesCleared = 0;
             isSettling = false;
             isClearing = false;
@@ -1051,13 +1052,26 @@
                 }
             }
 
+            // ★★★ ここからが修正されたコンボロジック ★★★
             if (isClearing) {
                 const clearedLines = checkAndClearLines();
                 
                 if (clearedLines > 0) {
-                    clearedLineInTurn = true;
-                    score += clearedLines * 100;
+                    // ラインが消えたので連鎖カウントを増やす
+                    comboCount++;
+                    maxCombo = Math.max(maxCombo, comboCount);
                     
+                    const basePoints = clearedLines * 100;
+                    
+                    // 2連鎖以上でボーナスとコンボ表示
+                    if (comboCount > 1) {
+                        const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1));
+                        score += comboBonus;
+                        showComboDisplay(comboCount, comboBonus);
+                    }
+                    score += basePoints;
+                    
+                    // 速度アップ処理
                     const prevLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
                     totalLinesCleared += clearedLines;
                     const currentLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
@@ -1066,24 +1080,13 @@
                         fallSpeed *= SPEED_INCREASE_RATE;
                     }
                     
-                    isSettling = true; 
+                    isSettling = true; // 再び砂を安定させ、さらなる連鎖をチェック
+                    
                 } else {
+                    // ラインが消えなかったので連鎖終了
                     isClearing = false;
                     if (!currentPiece) {
-                        if (clearedLineInTurn) {
-                            comboCount++;
-                            maxCombo = Math.max(maxCombo, comboCount);
-                            if (comboCount >= 2) {
-                                const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1));
-                                score += comboBonus;
-                                showComboDisplay(comboCount, comboBonus);
-                            }
-                        } else {
-                            comboCount = 0;
-                        }
-                        
-                        clearedLineInTurn = false;
-
+                        // 新しいピースを生成
                         currentPiece = nextPiece;
                         nextPiece = createPiece();
                         
@@ -1094,6 +1097,8 @@
                     }
                 }
             }
+            // ★★★ ここまでが修正されたコンボロジック ★★★
+
 
             drawGrid();
             if (currentPiece && !isSettling && !isClearing) {
