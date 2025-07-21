@@ -52,10 +52,8 @@
             display: block;
         }
         
-        /* ★★★ 変更点: スコア表示のスタイルを修正 ★★★ */
         #scoreDisplay {
             height: 30px;
-            /* 画面幅に応じてフォントサイズを自動調整 */
             font-size: clamp(10px, 3.5vw, 14px); 
             color: white;
             text-shadow: 1px 1px 2px black;
@@ -65,15 +63,14 @@
             border-radius: 5px;
             border: 1px solid rgba(255, 255, 255, 0.3);
             padding: 0 10px;
-            /* Flexboxを使って要素を均等に配置 */
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-sizing: border-box; /* paddingを含めて幅を計算 */
+            box-sizing: border-box; 
         }
 
         #scoreDisplay span {
-            white-space: nowrap; /* テキストが改行しないようにする */
+            white-space: nowrap; 
         }
         
         #pauseButton {
@@ -104,7 +101,6 @@
             transition: all 0.1s ease-out;
         }
         
-        /* 名前入力モーダルのスタイル */
         #nameInputModal {
             position: absolute;
             top: 0;
@@ -147,7 +143,11 @@
 </head>
 <body>
     <div id="gameContainer">
-        <div id="scoreDisplay">スコア: 0 最高コンボ: 0 速度: 1.00x</div>
+        <div id="scoreDisplay">
+            <span>スコア: 0</span>
+            <span>最高コンボ: 0x</span>
+            <span>速度: 1.00x</span>
+        </div>
         <button id="pauseButton">Pause</button>
         <canvas id="gameCanvas"></canvas>
         <div id="comboDisplay"></div>
@@ -168,7 +168,7 @@
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // ウェブアプリのFirebase設定
+        // あなたのウェブアプリのFirebase設定
         const firebaseConfig = {
             apiKey: "AIzaSyBFtXrjCLDENnj0uC5mF6V-wDuPbO9T2oc",
             authDomain: "soul-8d8b7.firebaseapp.com",
@@ -236,6 +236,7 @@
         let bgmAudio = null;
         let gameoverBgmAudio = null;
         let titleBgmAudio = null;
+        let highScoreBgmAudio = null; 
         let pleaseTapAnimation = null;
         
         // Firebase関連の変数
@@ -252,12 +253,10 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // 匿名でサインイン
                 await signInAnonymously(auth);
                 console.log('Firebase initialized and signed in anonymously.');
             } catch (error) {
                 console.error("Firebaseの初期化に失敗しました:", error);
-                // Firebaseがなくてもゲームが動くようにする
                 db = null; 
             }
         }
@@ -290,17 +289,11 @@
             }
             
             try {
-                const q = query(collection(db, "scores"));
+                const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(5));
                 const querySnapshot = await getDocs(q);
-                const scores = [];
-                querySnapshot.forEach((doc) => {
-                    scores.push(doc.data());
-                });
-
-                scores.sort((a, b) => b.score - a.score);
-                highScores = scores.slice(0, 5);
-
-            } catch (error) {
+                highScores = querySnapshot.docs.map(doc => doc.data());
+            } catch (error)
+            {
                 console.error("ハイスコアの取得に失敗しました: ", error);
                 highScores = [];
             }
@@ -371,18 +364,15 @@
             canvas.style.top = `${canvasTop}px`;
 
             const scoreDisplay = document.getElementById('scoreDisplay');
-            // スコア表示の幅を画面幅の95%に設定
-            const scoreWidth = containerWidth * 0.95;
-            const scoreLeft = (containerWidth - scoreWidth) / 2;
+            const scoreWidth = canvas.width; 
             scoreDisplay.style.width = `${scoreWidth}px`;
-            scoreDisplay.style.left = `${scoreLeft}px`;
+            scoreDisplay.style.left = `${canvasLeft}px`;
             scoreDisplay.style.top = `${scoreTop}px`;
 
             if (pauseButtonElement) {
                 const buttonWidth = 80;
-                const scoreRight = scoreLeft + scoreWidth;
                 pauseButtonElement.style.top = `${pauseTop}px`;
-                pauseButtonElement.style.left = `${scoreRight - buttonWidth}px`;
+                pauseButtonElement.style.left = `${canvasLeft + scoreWidth - buttonWidth}px`;
             }
         }
 
@@ -718,7 +708,6 @@
         /**
          * スコア表示を更新する
          */
-        // ★★★ 変更点: スコア表示の更新ロジックを修正 ★★★
         function updateScoreDisplay() {
             scoreDisplayElement.innerHTML = 
                 `<span>スコア: ${score}</span>` +
@@ -733,20 +722,21 @@
             gameState = 'gameOver';
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             cancelAnimationFrame(gameLoop);
-            stopAllBGM();
-            playGameOverBGM();
+            stopAllBGM(); 
 
             // ハイスコアかチェック
             if (db) {
                 await fetchHighScores();
                 
                 if (highScores.length < 5 || score > highScores[highScores.length - 1].score) {
-                    // ランキングが5位まで埋まっていなければ、または5位のスコアより高ければハイスコア
+                    playHighScoreBGM();
                     nameInputModal.style.display = 'flex';
                 } else {
+                    playGameOverBGM();
                     drawGameOverScreen();
                 }
             } else {
+                playGameOverBGM();
                 drawGameOverScreen();
             }
         }
@@ -851,7 +841,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.00', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.01', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -896,15 +886,28 @@
             } catch (error) { console.error('タイトルBGMの初期化に失敗しました:', error); titleBgmAudio = null; }
         }
         
+        function loadHighScoreBGM() {
+            try {
+                highScoreBgmAudio = new Audio('soul-highscore.mp3');
+                highScoreBgmAudio.loop = true;
+                highScoreBgmAudio.volume = 0.7;
+                highScoreBgmAudio.preload = 'auto';
+                highScoreBgmAudio.addEventListener('canplaythrough', () => console.log('ハイスコアBGMの読み込み完了'));
+                highScoreBgmAudio.addEventListener('error', (e) => { console.error('ハイスコアBGMの読み込みに失敗しました:', e); highScoreBgmAudio = null; });
+            } catch (error) { console.error('ハイスコアBGMの初期化に失敗しました:', error); highScoreBgmAudio = null; }
+        }
+        
         function stopAllBGM() {
             if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
             if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; }
             if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; }
+            if (highScoreBgmAudio && !highScoreBgmAudio.paused) { highScoreBgmAudio.pause(); highScoreBgmAudio.currentTime = 0; }
         }
 
         function playBGM() { stopAllBGM(); if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.play().catch(e => {}); } catch (e) {} } }
         function playTitleBGM() { stopAllBGM(); if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
         function playGameOverBGM() { stopAllBGM(); if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playHighScoreBGM() { stopAllBGM(); if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
         
         /**
          * ヨガ画像を読み込む
@@ -1177,6 +1180,7 @@
          * ポーズ画面を描画する
          */
         function drawPauseScreen() {
+            // ★★★ 変更点: ポーズ画面の背景を不透明な黒に変更 ★★★
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
             ctx.fillStyle = 'white';
@@ -1201,7 +1205,7 @@
         }
         
         function resumeGame() {
-            if (gameState === 'paused') { // 'playing'から'paused'に変更
+            if (gameState === 'paused') { 
                 gameState = 'playing';
                 playBGM();
                 update();
@@ -1221,6 +1225,8 @@
                 const playerName = playerNameInput.value.trim() || 'ななし';
                 await saveHighScore(playerName, score, maxCombo);
                 nameInputModal.style.display = 'none';
+                stopAllBGM();
+                playGameOverBGM();
                 drawGameOverScreen();
             });
 
@@ -1315,6 +1321,7 @@
             loadBGM();
             loadTitleBGM();
             loadGameOverBGM();
+            loadHighScoreBGM(); 
             loadYogaImage();
             
             initEventListeners();
