@@ -224,7 +224,6 @@
         let isClearing = false;
         let comboCount = 0;
         let maxCombo = 0;
-        // let clearedLineInTurn = false; // ★★★ 修正点: 不要なため削除 ★★★
         let gameState = 'pleaseTap';
         let comboDisplayTimeout;
         let touchStartX = 0;
@@ -240,10 +239,178 @@
         let highScoreBgmAudio = null; 
         let pleaseTapAnimation = null;
         
+        // オーディオ関連の変数
+        let audioCtx;
+        let soundsEnabled = false;
+
         // Firebase関連の変数
         let db;
         let auth;
         let highScores = [];
+
+        /**
+         * ユーザーの最初の操作でオーディオ機能を有効化する
+         */
+        function initAudio() {
+            if (!audioCtx) {
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    soundsEnabled = true;
+                    console.log("AudioContextが正常に初期化されました。");
+                } catch (e) {
+                    console.error("Web Audio APIはこのブラウザではサポートされていません。", e);
+                }
+            }
+        }
+
+        // ★★★ ここから効果音生成ロジック（リッチ版） ★★★
+        
+        function playMoveSound() {
+            if (!soundsEnabled || !audioCtx) return;
+            playSound({ frequency: 220, type: 'square', duration: 0.05, volume: 0.08 });
+        }
+
+        function playRotateSound() {
+            if (!soundsEnabled || !audioCtx) return;
+            playSound({ frequency: 330, type: 'triangle', duration: 0.08, volume: 0.12 });
+        }
+
+        function playDropSound() {
+            if (!soundsEnabled || !audioCtx) return;
+            playSound({ frequency: 400, type: 'sawtooth', duration: 0.15, volume: 0.15, sweep: -200 });
+        }
+        
+        /**
+         * 接地音（物理的な「トン」という音）
+         */
+        function playLandSound() {
+            if (!soundsEnabled || !audioCtx) return;
+            const now = audioCtx.currentTime;
+            
+            // ノイズで物理的な打撃感を表現
+            const noiseSource = audioCtx.createBufferSource();
+            const bufferSize = audioCtx.sampleRate * 0.1; // 0.1秒のノイズ
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            noiseSource.buffer = buffer;
+
+            // ローパスフィルターで「トン」という音色を作る
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(400, now);
+            filter.frequency.exponentialRampToValueAtTime(100, now + 0.08);
+
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.setValueAtTime(0.2, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+            noiseSource.connect(filter).connect(gainNode).connect(audioCtx.destination);
+            noiseSource.start(now);
+        }
+
+        /**
+         * ライン消去とコンボの効果音（リッチ版）
+         * @param {number} currentCombo - 現在のコンボ数
+         */
+        function playClearSound(currentCombo) {
+            if (!soundsEnabled || !audioCtx) return;
+            const now = audioCtx.currentTime;
+            const baseFreq = 261.63 * Math.pow(2, (currentCombo - 1) / 12); // C4から半音ずつ上がる
+
+            // 3つのオシレーターで和音（メジャーコード）を生成
+            const frequencies = [baseFreq, baseFreq * Math.pow(2, 4/12), baseFreq * Math.pow(2, 7/12)];
+            
+            // ディレイ（やまびこ）効果
+            const delay = audioCtx.createDelay(0.5);
+            delay.delayTime.value = 0.15;
+            const feedback = audioCtx.createGain();
+            feedback.gain.value = 0.4;
+            delay.connect(feedback);
+            feedback.connect(delay);
+            
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(0.2, now);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+            
+            delay.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            frequencies.forEach((freq, index) => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now);
+
+                // ビブラート（音の揺らぎ）
+                const lfo = audioCtx.createOscillator();
+                lfo.type = 'sine';
+                lfo.frequency.value = 5 + index * 1.5; // 各音で少し揺れを変える
+                const lfoGain = audioCtx.createGain();
+                lfoGain.gain.value = 5; // 揺れの深さ
+                lfo.connect(lfoGain).connect(osc.frequency);
+                
+                const oscGain = audioCtx.createGain();
+                oscGain.gain.setValueAtTime(0.1 + (0.05 * index), now);
+                oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+                osc.connect(oscGain).connect(masterGain);
+                osc.connect(oscGain).connect(delay); // ディレイにも送る
+                
+                osc.start(now);
+                lfo.start(now);
+                osc.stop(now + 0.3);
+                lfo.stop(now + 0.3);
+            });
+        }
+
+        /**
+         * ゲームオーバーサウンド（リッチ版）
+         */
+        function playGameOverSound() {
+            if (!soundsEnabled || !audioCtx) return;
+            const now = audioCtx.currentTime;
+            
+            // 不協和音を生成
+            const freqs = [164.81, 155.56, 146.83]; // E3, D#3, D3
+            freqs.forEach(freq => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(freq, now);
+                osc.frequency.exponentialRampToValueAtTime(freq / 2, now + 1.2);
+
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.setValueAtTime(0.15, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 1.2);
+
+                osc.connect(gainNode).connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 1.2);
+            });
+        }
+        
+        // 汎用的なplaySound関数（シンプルな音用）
+        function playSound({ frequency = 440, type = 'sine', duration = 0.1, volume = 0.5, sweep = 0 }) {
+            if (!soundsEnabled || !audioCtx) return;
+            const now = audioCtx.currentTime;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, now);
+            if (sweep !== 0) {
+                oscillator.frequency.linearRampToValueAtTime(frequency + sweep, now + duration);
+            }
+            gainNode.gain.setValueAtTime(volume, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        }
+
+        // ★★★ 効果音ロジックここまで ★★★
+
 
         /**
          * Firebaseの初期化と認証
@@ -517,6 +684,8 @@
             currentPiece.shape = rotated;
             if (!canMove(0, 0)) {
                 currentPiece.shape = previousShape;
+            } else {
+                playRotateSound();
             }
         }
 
@@ -525,6 +694,7 @@
          */
         function mergePiece() {
             if (!currentPiece) return;
+            playLandSound();
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
@@ -542,7 +712,7 @@
             }
             currentPiece = null;
             isSettling = true;
-            comboCount = 0; // ★★★ 修正点: 連鎖カウントをリセット ★★★
+            comboCount = 0;
         }
 
         /**
@@ -697,6 +867,7 @@
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             cancelAnimationFrame(gameLoop);
             stopAllBGM(); 
+            playGameOverSound();
 
             if (db) {
                 await fetchHighScores();
@@ -814,7 +985,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.05', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.07', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1011,7 +1182,6 @@
             score = 0;
             comboCount = 0;
             maxCombo = 0;
-            // clearedLineInTurn = false; // ★★★ 修正点: 不要なため削除 ★★★
             totalLinesCleared = 0;
             isSettling = false;
             isClearing = false;
@@ -1052,18 +1222,16 @@
                 }
             }
 
-            // ★★★ ここからが修正されたコンボロジック ★★★
             if (isClearing) {
                 const clearedLines = checkAndClearLines();
                 
                 if (clearedLines > 0) {
-                    // ラインが消えたので連鎖カウントを増やす
                     comboCount++;
                     maxCombo = Math.max(maxCombo, comboCount);
+                    playClearSound(comboCount);
                     
                     const basePoints = clearedLines * 100;
                     
-                    // 2連鎖以上でボーナスとコンボ表示
                     if (comboCount > 1) {
                         const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1));
                         score += comboBonus;
@@ -1071,7 +1239,6 @@
                     }
                     score += basePoints;
                     
-                    // 速度アップ処理
                     const prevLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
                     totalLinesCleared += clearedLines;
                     const currentLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
@@ -1080,13 +1247,11 @@
                         fallSpeed *= SPEED_INCREASE_RATE;
                     }
                     
-                    isSettling = true; // 再び砂を安定させ、さらなる連鎖をチェック
+                    isSettling = true;
                     
                 } else {
-                    // ラインが消えなかったので連鎖終了
                     isClearing = false;
                     if (!currentPiece) {
-                        // 新しいピースを生成
                         currentPiece = nextPiece;
                         nextPiece = createPiece();
                         
@@ -1097,7 +1262,6 @@
                     }
                 }
             }
-            // ★★★ ここまでが修正されたコンボロジック ★★★
 
 
             drawGrid();
@@ -1118,15 +1282,22 @@
 
             switch (action) {
                 case 'left':
-                    if (canMove(-1, 0)) currentPiece.x--;
+                    if (canMove(-1, 0)) {
+                        currentPiece.x--;
+                        playMoveSound();
+                    }
                     break;
                 case 'right':
-                    if (canMove(1, 0)) currentPiece.x++;
+                    if (canMove(1, 0)) {
+                        currentPiece.x++;
+                        playMoveSound();
+                    }
                     break;
                 case 'rotate':
                     rotate();
                     break;
                 case 'drop':
+                    playDropSound();
                     while (canMove(0, 1)) {
                         currentPiece.y++;
                         score += 1; // ハードドロップボーナス
@@ -1141,6 +1312,7 @@
          * 画面タップ/クリックの共通処理
          */
         async function handleScreenTap(x, y) {
+            initAudio();
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             switch (gameState) {
                 case 'pleaseTap':
@@ -1178,15 +1350,15 @@
          * ポーズ画面を描画する
          */
         function drawPauseScreen() {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
+            ctx.fillStyle = '#000000'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = 'white';
             ctx.font = '30px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('PAUSED', (cellSize * gridWidth) / 2, canvas.height / 2 - 20);
+            ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2 - 20);
             ctx.font = '16px Arial';
-            ctx.fillText('タップして再開', (cellSize * gridWidth) / 2, canvas.height / 2 + 20);
+            ctx.fillText('タップして再開', canvas.width / 2, canvas.height / 2 + 20);
         }
 
         /**
@@ -1196,6 +1368,7 @@
             if (gameState === 'playing') {
                 gameState = 'paused';
                 stopAllBGM();
+                if (audioCtx) audioCtx.suspend();
                 cancelAnimationFrame(gameLoop);
                 drawPauseScreen();
             }
@@ -1204,6 +1377,7 @@
         function resumeGame() {
             if (gameState === 'paused') { 
                 gameState = 'playing';
+                if (audioCtx) audioCtx.resume();
                 playBGM();
                 update();
             }
@@ -1215,6 +1389,7 @@
         function initEventListeners() {
             pauseButtonElement.addEventListener('click', (e) => {
                 e.stopPropagation();
+                initAudio();
                 togglePause();
             });
 
@@ -1230,6 +1405,7 @@
             canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 if (gameState === 'playing') {
+                    initAudio();
                     const touch = e.touches[0];
                     touchStartX = touch.clientX;
                     touchStartY = touch.clientY;
