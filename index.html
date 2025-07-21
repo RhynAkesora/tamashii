@@ -165,19 +165,8 @@
     <script type="module">
         // Firebase SDKのインポート
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // ウェブアプリのFirebase設定
-        const firebaseConfig = {
-            apiKey: "AIzaSyBFtXrjCLDENnj0uC5mF6V-wDuPbO9T2oc",
-            authDomain: "soul-8d8b7.firebaseapp.com",
-            projectId: "soul-8d8b7",
-            storageBucket: "soul-8d8b7.firebasestorage.app",
-            messagingSenderId: "547048279726",
-            appId: "1:547048279726:web:d1a67c7a8eb060f8b1273f",
-            measurementId: "G-MZLS3H66X8"
-        };
         
         // Canvas要素とコンテキストの取得
         const canvas = document.getElementById('gameCanvas');
@@ -243,6 +232,11 @@
         let audioCtx;
         let soundsEnabled = false;
 
+        // エフェクト関連の変数
+        let visualEffects = [];
+        let shakeDuration = 0;
+        let shakeIntensity = 0;
+
         // Firebase関連の変数
         let db;
         let auth;
@@ -263,7 +257,7 @@
             }
         }
 
-        // ★★★ ここから効果音生成ロジック（リッチ版） ★★★
+        // 効果音生成ロジック
         
         function playMoveSound() {
             if (!soundsEnabled || !audioCtx) return;
@@ -280,16 +274,12 @@
             playSound({ frequency: 400, type: 'sawtooth', duration: 0.15, volume: 0.15, sweep: -200 });
         }
         
-        /**
-         * 接地音（物理的な「トン」という音）
-         */
         function playLandSound() {
             if (!soundsEnabled || !audioCtx) return;
             const now = audioCtx.currentTime;
             
-            // ノイズで物理的な打撃感を表現
             const noiseSource = audioCtx.createBufferSource();
-            const bufferSize = audioCtx.sampleRate * 0.1; // 0.1秒のノイズ
+            const bufferSize = audioCtx.sampleRate * 0.1;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
@@ -297,7 +287,6 @@
             }
             noiseSource.buffer = buffer;
 
-            // ローパスフィルターで「トン」という音色を作る
             const filter = audioCtx.createBiquadFilter();
             filter.type = 'lowpass';
             filter.frequency.setValueAtTime(400, now);
@@ -312,68 +301,49 @@
         }
 
         /**
-         * ライン消去とコンボの効果音（リッチ版）
-         * @param {number} currentCombo - 現在のコンボ数
+         * ★★★ ブロック消去時の効果音 ★★★
+         * よりクリアで爽快感のある効果音に変更
+         * コンボ数に応じて音の高さが変化
          */
         function playClearSound(currentCombo) {
             if (!soundsEnabled || !audioCtx) return;
             const now = audioCtx.currentTime;
-            const baseFreq = 261.63 * Math.pow(2, (currentCombo - 1) / 12); // C4から半音ずつ上がる
 
-            // 3つのオシレーターで和音（メジャーコード）を生成
-            const frequencies = [baseFreq, baseFreq * Math.pow(2, 4/12), baseFreq * Math.pow(2, 7/12)];
-            
-            // ディレイ（やまびこ）効果
-            const delay = audioCtx.createDelay(0.5);
-            delay.delayTime.value = 0.15;
-            const feedback = audioCtx.createGain();
-            feedback.gain.value = 0.4;
-            delay.connect(feedback);
-            feedback.connect(delay);
-            
-            const masterGain = audioCtx.createGain();
-            masterGain.gain.setValueAtTime(0.2, now);
-            masterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-            
-            delay.connect(masterGain);
-            masterGain.connect(audioCtx.destination);
+            // ホワイトノイズを生成
+            const noiseSource = audioCtx.createBufferSource();
+            const bufferSize = audioCtx.sampleRate * 0.2; // 0.2秒のノイズ
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            noiseSource.buffer = buffer;
 
-            frequencies.forEach((freq, index) => {
-                const osc = audioCtx.createOscillator();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(freq, now);
+            // フィルターでノイズを整形
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            const baseFreq = 800 + (currentCombo * 150); // コンボが多いほど高音に
+            filter.frequency.setValueAtTime(baseFreq, now);
+            filter.Q.setValueAtTime(10, now);
+            filter.frequency.exponentialRampToValueAtTime(baseFreq * 3, now + 0.15);
 
-                // ビブラート（音の揺らぎ）
-                const lfo = audioCtx.createOscillator();
-                lfo.type = 'sine';
-                lfo.frequency.value = 5 + index * 1.5; // 各音で少し揺れを変える
-                const lfoGain = audioCtx.createGain();
-                lfoGain.gain.value = 5; // 揺れの深さ
-                lfo.connect(lfoGain).connect(osc.frequency);
-                
-                const oscGain = audioCtx.createGain();
-                oscGain.gain.setValueAtTime(0.1 + (0.05 * index), now);
-                oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            // ゲインノードで音量を制御
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.setValueAtTime(0.2, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
-                osc.connect(oscGain).connect(masterGain);
-                osc.connect(oscGain).connect(delay); // ディレイにも送る
-                
-                osc.start(now);
-                lfo.start(now);
-                osc.stop(now + 0.3);
-                lfo.stop(now + 0.3);
-            });
+            // ノードを接続
+            noiseSource.connect(filter).connect(gainNode).connect(audioCtx.destination);
+
+            // サウンドを再生
+            noiseSource.start(now);
         }
 
-        /**
-         * ゲームオーバーサウンド（リッチ版）
-         */
         function playGameOverSound() {
             if (!soundsEnabled || !audioCtx) return;
             const now = audioCtx.currentTime;
             
-            // 不協和音を生成
-            const freqs = [164.81, 155.56, 146.83]; // E3, D#3, D3
+            const freqs = [164.81, 155.56, 146.83];
             freqs.forEach(freq => {
                 const osc = audioCtx.createOscillator();
                 osc.type = 'sawtooth';
@@ -390,7 +360,6 @@
             });
         }
         
-        // 汎用的なplaySound関数（シンプルな音用）
         function playSound({ frequency = 440, type = 'sine', duration = 0.1, volume = 0.5, sweep = 0 }) {
             if (!soundsEnabled || !audioCtx) return;
             const now = audioCtx.currentTime;
@@ -409,23 +378,95 @@
             oscillator.stop(now + duration);
         }
 
-        // ★★★ 効果音ロジックここまで ★★★
+        // エフェクト生成ロジック
+
+        function triggerScreenShake(intensity, duration) {
+            shakeIntensity = intensity;
+            shakeDuration = duration;
+        }
+
+        function updateAndDrawEffects() {
+            ctx.globalCompositeOperation = 'lighter';
+
+            for (let i = visualEffects.length - 1; i >= 0; i--) {
+                const p = visualEffects[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.05;
+                p.lifespan--;
+                p.alpha = p.lifespan / 60;
+
+                if (p.lifespan <= 0) {
+                    visualEffects.splice(i, 1);
+                } else {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            ctx.globalAlpha = 1.0;
+            ctx.globalCompositeOperation = 'source-over';
+        }
+        
+        function clearComponentAndCreateEffect(component) {
+            for (const key of component) {
+                if (Math.random() < 0.1) {
+                    const [pX, pY] = key.split(',').map(Number);
+                    for (let i = 0; i < 3; i++) {
+                        visualEffects.push({
+                            x: pX * sandSize,
+                            y: pY * sandSize,
+                            vx: (Math.random() - 0.5) * 4,
+                            vy: (Math.random() - 0.5) * 4,
+                            color: '#FFFFFF', // 色を白(#FFFFFF)に固定
+                            alpha: 1.0,
+                            size: Math.random() * 2 + 1,
+                            lifespan: 60
+                        });
+                    }
+                }
+            }
+            sandParticles = sandParticles.filter(p => !component.has(`${p.x},${p.y}`));
+        }
 
 
         /**
-         * Firebaseの初期化と認証
+         * Firebase設定と認証方法
          */
         async function initFirebase() {
             try {
+                // 環境変数からFirebase設定を読み込む。未定義の場合はフォールバック
+                const firebaseConfig = typeof __firebase_config !== 'undefined'
+                    ? JSON.parse(__firebase_config)
+                    : {
+                        // この部分はローカルテスト用のダミーです。
+                        // 実際のAPIキーなどをここにハードコードしないでください。
+                        apiKey: "YOUR_API_KEY",
+                        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+                        projectId: "YOUR_PROJECT_ID",
+                        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+                        messagingSenderId: "YOUR_SENDER_ID",
+                        appId: "YOUR_APP_ID"
+                    };
+
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                
-                await signInAnonymously(auth);
-                console.log('Firebase initialized and signed in anonymously.');
+
+                // カスタムトークンが利用可能な場合はそれを使用し、そうでなければ匿名認証にフォールバック
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    console.log('Firebase initialized and signed in with custom token.');
+                } else {
+                    await signInAnonymously(auth);
+                    console.log('Firebase initialized and signed in anonymously.');
+                }
             } catch (error) {
                 console.error("Firebaseの初期化に失敗しました:", error);
-                db = null; 
+                db = null;
             }
         }
 
@@ -716,15 +757,28 @@
         }
 
         /**
-         * 指定された色の連結成分を見つける
+         * 指定された色の連結成分を見つける（最適化版）
+         * @param {number} color - 探索対象の色のインデックス
          */
         function findConnectedComponents(color) {
             const visited = new Set();
             const components = [];
-            for (const particle of sandParticles) {
-                if (particle.color === color && !visited.has(`${particle.x},${particle.y}`)) {
+            
+            const colorGrid = new Map();
+            const startingPoints = []; 
+            for (const p of sandParticles) {
+                if (p.color === color) {
+                    const key = `${p.x},${p.y}`;
+                    colorGrid.set(key, p);
+                    startingPoints.push(p);
+                }
+            }
+
+            for (const particle of startingPoints) {
+                const key = `${particle.x},${particle.y}`;
+                if (!visited.has(key)) {
                     const component = new Set();
-                    dfs(particle, color, visited, component);
+                    dfs(particle, visited, component, colorGrid);
                     components.push(component);
                 }
             }
@@ -732,23 +786,35 @@
         }
 
         /**
-         * 深度優先探索で連結成分を探索する
+         * 深度優先探索（反復版）で連結成分を探索する
+         * @param {object} startParticle - 開始地点のパーティクル
+         * @param {Set<string>} visited - 訪問済みパーティクルのキーのセット
+         * @param {Set<string>} component - 現在の連結成分のキーのセット
+         * @param {Map<string, object>} grid - 高速検索用のパーティクル地図
          */
-        function dfs(particle, color, visited, component) {
-            const key = `${particle.x},${particle.y}`;
-            if (visited.has(key)) return;
-            visited.add(key);
-            component.add(key);
+        function dfs(startParticle, visited, component, grid) {
+            const stack = [startParticle];
+            const startKey = `${startParticle.x},${startParticle.y}`;
+            visited.add(startKey);
 
-            const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-            for (const [dx, dy] of directions) {
-                const newX = particle.x + dx;
-                const newY = particle.y + dy;
-                const neighbor = sandParticles.find(p => 
-                    p.x === newX && p.y === newY && p.color === color
-                );
-                if (neighbor) {
-                    dfs(neighbor, color, visited, component);
+            while (stack.length > 0) {
+                const particle = stack.pop();
+                const key = `${particle.x},${particle.y}`;
+                component.add(key);
+
+                const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+                for (const [dx, dy] of directions) {
+                    const newX = particle.x + dx;
+                    const newY = particle.y + dy;
+                    const neighborKey = `${newX},${newY}`;
+
+                    if (!visited.has(neighborKey)) {
+                        const neighbor = grid.get(neighborKey);
+                        if (neighbor) {
+                            visited.add(neighborKey);
+                            stack.push(neighbor);
+                        }
+                    }
                 }
             }
         }
@@ -764,55 +830,53 @@
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x);
             }
-            return maxX - minX + 1 === gridWidth * cellDivisions;
+            return maxX - minX + 1 >= gridWidth * cellDivisions;
         }
 
-        /**
-         * 指定された連結成分の砂粒子を削除する
-         */
-        function removeSandParticles(component) {
-            sandParticles = sandParticles.filter(p => !component.has(`${p.x},${p.y}`));
-        }
-
-        /**
-         * コンボ表示を画面に表示する
-         */
-        function showComboDisplay(combo, points) {
-            let displayText = '';
-            if (combo >= 2) {
-                const multiplier = Math.pow(1.5, combo - 1).toFixed(2);
-                displayText = `${combo} コンボ! (+${points})`;
-                comboDisplayElement.style.fontSize = '28px';
-                comboDisplayElement.style.color = '#FFD700';
-            }
-            
-            comboDisplayElement.textContent = displayText;
-            comboDisplayElement.style.display = 'block';
-            comboDisplayElement.style.transform = 'translate(-50%, -50%) scale(1.2)';
-            
-            clearTimeout(comboDisplayTimeout);
-            comboDisplayTimeout = setTimeout(() => {
-                comboDisplayElement.style.transform = 'translate(-50%, -50%) scale(1)';
-                comboDisplayElement.style.display = 'none';
-            }, 1500);
-        }
-
-        /**
-         * ラインを消去できるかチェックして消去する
-         */
+        // ライン消去処理
         function checkAndClearLines() {
             let clearedLinesCount = 0;
-            for (let color = 0; color < colors.length; color++) {
-                const connectedComponents = findConnectedComponents(color);
+            const allComponentsToClear = new Set();
+
+            for (let colorIndex = 0; colorIndex < colors.length; colorIndex++) {
+                const connectedComponents = findConnectedComponents(colorIndex);
                 for (const component of connectedComponents) {
                     if (isFullWidth(component)) {
-                        removeSandParticles(component);
+                        for (const key of component) {
+                            allComponentsToClear.add(key);
+                        }
+                        createEffectForComponent(component);
                         clearedLinesCount++;
                     }
                 }
             }
+
+            if (clearedLinesCount > 0) {
+                sandParticles = sandParticles.filter(p => !allComponentsToClear.has(`${p.x},${p.y}`));
+            }
             return clearedLinesCount;
         }
+
+        function createEffectForComponent(component) {
+             for (const key of component) {
+                if (Math.random() < 0.1) {
+                    const [pX, pY] = key.split(',').map(Number);
+                    for (let i = 0; i < 3; i++) {
+                        visualEffects.push({
+                            x: pX * sandSize,
+                            y: pY * sandSize,
+                            vx: (Math.random() - 0.5) * 4,
+                            vy: (Math.random() - 0.5) * 4,
+                            color: '#FFFFFF',
+                            alpha: 1.0,
+                            size: Math.random() * 2 + 1,
+                            lifespan: 60
+                        });
+                    }
+                }
+            }
+        }
+
 
         /**
          * 砂粒子の物理シミュレーションを実行する
@@ -820,30 +884,51 @@
         function simulateSand() {
             let moved = false;
             sandParticles.sort((a, b) => b.y - a.y);
+            
+            const grid = new Set();
+            for (const p of sandParticles) {
+                grid.add(`${p.x},${p.y}`);
+            }
+
             for (const particle of sandParticles) {
-                if (particle.y < gridHeight * cellDivisions - 1 && 
-                    !sandParticles.some(p => p.x === particle.x && p.y === particle.y + 1)) {
+                const currentKey = `${particle.x},${particle.y}`;
+                
+                const belowY = particle.y + 1;
+                if (belowY >= gridHeight * cellDivisions) continue;
+
+                const belowKey = `${particle.x},${belowY}`;
+                if (!grid.has(belowKey)) {
+                    grid.delete(currentKey);
                     particle.y++;
+                    grid.add(`${particle.x},${particle.y}`);
                     moved = true;
-                } else if (particle.y < gridHeight * cellDivisions - 1) {
-                    const leftClear = particle.x > 0 && 
-                        !sandParticles.some(p => p.x === particle.x - 1 && p.y === particle.y + 1);
-                    const rightClear = particle.x < gridWidth * cellDivisions - 1 && 
-                        !sandParticles.some(p => p.x === particle.x + 1 && p.y === particle.y + 1);
-                    
-                    if (leftClear && rightClear) {
-                        particle.x += Math.random() < 0.5 ? -1 : 1;
-                        particle.y++;
-                        moved = true;
-                    } else if (leftClear) {
-                        particle.x--;
-                        particle.y++;
-                        moved = true;
-                    } else if (rightClear) {
-                        particle.x++;
-                        particle.y++;
-                        moved = true;
-                    }
+                    continue; 
+                }
+
+                const leftDiagKey = `${particle.x - 1},${belowY}`;
+                const rightDiagKey = `${particle.x + 1},${belowY}`;
+
+                const leftClear = particle.x > 0 && !grid.has(leftDiagKey);
+                const rightClear = particle.x < gridWidth * cellDivisions - 1 && !grid.has(rightDiagKey);
+                
+                let moveDirection = 0;
+
+                // 決定論的なロジックに変更
+                if (leftClear && rightClear) {
+                    // 粒子のx座標が偶数か奇数かに基づいて移動方向を決定
+                    moveDirection = (particle.x % 2 === 0) ? -1 : 1;
+                } else if (leftClear) {
+                    moveDirection = -1;
+                } else if (rightClear) {
+                    moveDirection = 1;
+                }
+
+                if (moveDirection !== 0) {
+                    grid.delete(currentKey);
+                    particle.x += moveDirection;
+                    particle.y++;
+                    grid.add(`${particle.x},${particle.y}`);
+                    moved = true;
                 }
             }
             return moved;
@@ -985,7 +1070,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.07', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.16', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1206,23 +1291,12 @@
 
             frameCount++;
             
-            if (frameCount % Math.floor(fallSpeed) === 0 && !isSettling && !isClearing && currentPiece) {
-                if (canMove(0, 1)) {
-                    currentPiece.y++;
-                } else {
-                    mergePiece();
-                    isSettling = true;
-                }
-            }
-
             if (isSettling) {
                 if (!simulateSand()) {
                     isSettling = false;
                     isClearing = true;
                 }
-            }
-
-            if (isClearing) {
+            } else if (isClearing) {
                 const clearedLines = checkAndClearLines();
                 
                 if (clearedLines > 0) {
@@ -1236,6 +1310,7 @@
                         const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1));
                         score += comboBonus;
                         showComboDisplay(comboCount, comboBonus);
+                        triggerScreenShake(comboCount * 1.5, 15);
                     }
                     score += basePoints;
                     
@@ -1247,22 +1322,43 @@
                         fallSpeed *= SPEED_INCREASE_RATE;
                     }
                     
-                    isSettling = true;
+                    isSettling = true; 
+                    isClearing = false; 
                     
                 } else {
                     isClearing = false;
-                    if (!currentPiece) {
-                        currentPiece = nextPiece;
-                        nextPiece = createPiece();
-                        
-                        if (!canMove(0, 0)) {
-                            gameOver();
-                            return;
-                        }
+                    currentPiece = nextPiece;
+                    nextPiece = createPiece();
+                    
+                    if (!canMove(0, 0)) {
+                        gameOver();
+                        return;
+                    }
+                }
+            } else if (currentPiece) {
+                if (frameCount % Math.floor(fallSpeed) === 0) {
+                    if (canMove(0, 1)) {
+                        currentPiece.y++;
+                    } else {
+                        mergePiece();
+                        isSettling = true;
                     }
                 }
             }
 
+            // 描画処理
+            ctx.save();
+
+            if (shakeDuration > 0) {
+                ctx.translate(
+                    Math.random() * shakeIntensity - shakeIntensity / 2,
+                    Math.random() * shakeIntensity - shakeIntensity / 2
+                );
+                shakeDuration--;
+                if (shakeDuration <= 0) {
+                    shakeIntensity = 0;
+                }
+            }
 
             drawGrid();
             if (currentPiece && !isSettling && !isClearing) {
@@ -1270,8 +1366,30 @@
             }
             drawNextPiece();
 
+            updateAndDrawEffects();
+
+            ctx.restore();
+
             updateScoreDisplay();
+
             gameLoop = requestAnimationFrame(update);
+        }
+        
+        function showComboDisplay(count, bonus) {
+            comboDisplayElement.innerHTML = `${count} COMBO!<br>+${bonus}`;
+            comboDisplayElement.style.display = 'block';
+            comboDisplayElement.style.transform = 'translate(-50%, -50%) scale(1.5)';
+            comboDisplayElement.style.opacity = '1';
+
+            setTimeout(() => {
+                comboDisplayElement.style.transform = 'translate(-50%, -50%) scale(1)';
+                comboDisplayElement.style.opacity = '0';
+            }, 100);
+
+            if (comboDisplayTimeout) clearTimeout(comboDisplayTimeout);
+            comboDisplayTimeout = setTimeout(() => {
+                comboDisplayElement.style.display = 'none';
+            }, 1000);
         }
 
         /**
@@ -1300,7 +1418,7 @@
                     playDropSound();
                     while (canMove(0, 1)) {
                         currentPiece.y++;
-                        score += 1; // ハードドロップボーナス
+                        score += 1;
                     }
                     mergePiece();
                     isSettling = true;
