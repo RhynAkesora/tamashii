@@ -209,8 +209,8 @@
         // UI設定
         const NEXT_PIECE_PADDING = 10;
         const NEXT_PIECE_LABEL = 'NEXT';
-        const SPEED_INCREASE_RATE = 0.99;
-        const SPEED_INCREASE_INTERVAL = 5;
+        const SPEED_INCREASE_RATE = 0.975; // ★★★ 変更点: 速度上昇率を再調整 ★★★
+        const SPEED_INCREASE_INTERVAL = 5; // ★★★ 変更点: 5ライン消すごとに速度上昇 ★★★
 
         // ゲーム変数
         let cellSize, sandSize;
@@ -224,6 +224,7 @@
         let isClearing = false;
         let comboCount = 0;
         let maxCombo = 0;
+        let clearedLineInTurn = false;
         let gameState = 'pleaseTap';
         let comboDisplayTimeout;
         let touchStartX = 0;
@@ -231,7 +232,7 @@
         let touchStartTime = 0;
         let isTouchHolding = false;
         let fallSpeed = 30;
-        let totalRows = 0;
+        let totalLinesCleared = 0;
         let yogaImage = null;
         let bgmAudio = null;
         let gameoverBgmAudio = null;
@@ -603,31 +604,15 @@
         }
 
         /**
-         * コンボスコアを計算する
-         */
-        function calculateComboScore(combo, lines) {
-            const baseScore = lines * 100;
-            const baseMultiplier = 1.5;
-            let multiplier = Math.pow(baseMultiplier, combo - 1);
-            return Math.floor(baseScore * multiplier);
-        }
-
-        /**
          * コンボ表示を画面に表示する
          */
         function showComboDisplay(combo, points) {
             let displayText = '';
             if (combo >= 2) {
                 const multiplier = Math.pow(1.5, combo - 1).toFixed(2);
-                displayText = `${combo} コンボ! (x${multiplier})`;
+                displayText = `${combo} コンボ! (+${points})`;
                 comboDisplayElement.style.fontSize = '28px';
                 comboDisplayElement.style.color = '#FFD700';
-            } else if (combo === 1) {
-                displayText = `+${points}`;
-                comboDisplayElement.style.fontSize = '22px';
-                comboDisplayElement.style.color = '#FFFFFF';
-            } else {
-                return;
             }
             
             comboDisplayElement.textContent = displayText;
@@ -641,33 +626,21 @@
             }, 1500);
         }
 
-
         /**
          * ラインを消去できるかチェックして消去する
          */
         function checkAndClearLines() {
-            let cleared = false;
-            let clearedLines = 0;
+            let clearedLinesCount = 0;
             for (let color = 0; color < colors.length; color++) {
                 const connectedComponents = findConnectedComponents(color);
                 for (const component of connectedComponents) {
                     if (isFullWidth(component)) {
                         removeSandParticles(component);
-                        cleared = true;
-                        clearedLines++;
+                        clearedLinesCount++;
                     }
                 }
             }
-            
-            if (cleared) {
-                comboCount++;
-                const comboScore = calculateComboScore(comboCount, clearedLines);
-                score += comboScore;
-                showComboDisplay(comboCount, comboScore);
-                maxCombo = Math.max(maxCombo, comboCount);
-            }
-            
-            return cleared;
+            return clearedLinesCount;
         }
 
         /**
@@ -724,7 +697,6 @@
             cancelAnimationFrame(gameLoop);
             stopAllBGM(); 
 
-            // ハイスコアかチェック
             if (db) {
                 await fetchHighScores();
                 
@@ -841,7 +813,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.01', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.04', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1038,13 +1010,14 @@
             score = 0;
             comboCount = 0;
             maxCombo = 0;
+            clearedLineInTurn = false;
+            totalLinesCleared = 0;
             isSettling = false;
             isClearing = false;
             frameCount = 0;
             currentPiece = createPiece();
             nextPiece = createPiece();
             fallSpeed = 30;
-            totalRows = 0;
             updateScoreDisplay();
             gameState = 'playing';
             if (pauseButtonElement) pauseButtonElement.style.display = 'block';
@@ -1065,11 +1038,6 @@
             if (frameCount % Math.floor(fallSpeed) === 0 && !isSettling && !isClearing && currentPiece) {
                 if (canMove(0, 1)) {
                     currentPiece.y++;
-                    score++;
-                    totalRows++;
-                    if (totalRows > 0 && totalRows % SPEED_INCREASE_INTERVAL === 0) {
-                        fallSpeed *= SPEED_INCREASE_RATE;
-                    }
                 } else {
                     mergePiece();
                     isSettling = true;
@@ -1084,15 +1052,41 @@
             }
 
             if (isClearing) {
-                const cleared = checkAndClearLines();
-                if (cleared) {
-                    isSettling = true;
+                const clearedLines = checkAndClearLines();
+                
+                if (clearedLines > 0) {
+                    clearedLineInTurn = true;
+                    score += clearedLines * 100;
+                    
+                    const prevLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
+                    totalLinesCleared += clearedLines;
+                    const currentLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
+
+                    if(currentLinesTier > prevLinesTier) {
+                        fallSpeed *= SPEED_INCREASE_RATE;
+                    }
+                    
+                    isSettling = true; 
                 } else {
                     isClearing = false;
                     if (!currentPiece) {
+                        if (clearedLineInTurn) {
+                            comboCount++;
+                            maxCombo = Math.max(maxCombo, comboCount);
+                            if (comboCount >= 2) {
+                                const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1));
+                                score += comboBonus;
+                                showComboDisplay(comboCount, comboBonus);
+                            }
+                        } else {
+                            comboCount = 0;
+                        }
+                        
+                        clearedLineInTurn = false;
+
                         currentPiece = nextPiece;
                         nextPiece = createPiece();
-                        comboCount = 0;
+                        
                         if (!canMove(0, 0)) {
                             gameOver();
                             return;
@@ -1130,8 +1124,7 @@
                 case 'drop':
                     while (canMove(0, 1)) {
                         currentPiece.y++;
-                        score += 2;
-                        totalRows++;
+                        score += 1; // ハードドロップボーナス
                     }
                     mergePiece();
                     isSettling = true;
@@ -1157,7 +1150,7 @@
                 case 'title':
                     if (isHighScoreButtonTapped(x, y)) {
                         gameState = 'highscore';
-                        drawHighScoreScreen(true); // ローディング表示
+                        drawHighScoreScreen(true);
                         await fetchHighScores();
                         drawHighScoreScreen(false);
                     } else {
@@ -1180,7 +1173,6 @@
          * ポーズ画面を描画する
          */
         function drawPauseScreen() {
-            // ★★★ 変更点: ポーズ画面の背景を不透明な黒に変更 ★★★
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, cellSize * gridWidth, canvas.height);
             ctx.fillStyle = 'white';
