@@ -332,8 +332,7 @@
             filter.frequency.exponentialRampToValueAtTime(baseFreq * 3, now + 0.15);
 
             const gainNode = audioCtx.createGain();
-            // ★★★ ブロック消去音 ★★★
-            gainNode.gain.setValueAtTime(3.0, now);
+            gainNode.gain.setValueAtTime(1.0, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
             noiseSource.connect(filter).connect(gainNode).connect(masterGain);
@@ -942,15 +941,17 @@
                     }, 1000);
                     nameInputModal.style.display = 'flex';
                 } else {
+                    // ★★★ 変更点: BGM再生の遅延を1300msに変更 ★★★
                     setTimeout(() => {
                         playGameOverBGM();
-                    }, 1000);
+                    }, 1300);
                     drawGameOverScreen();
                 }
             } else {
+                // ★★★ 変更点: BGM再生の遅延を1300msに変更 ★★★
                 setTimeout(() => {
                     playGameOverBGM();
-                }, 1000);
+                }, 1300);
                 drawGameOverScreen();
             }
         }
@@ -1032,7 +1033,7 @@
 
             ctx.font = `${subtitleFontSize}px Arial`;
             ctx.fillStyle = '#cccccc';
-            ctx.fillText('~ Soul Tetris ~', canvas.width / 2, canvas.height * 0.22);
+            ctx.fillText('~ Soul Resonance ~', canvas.width / 2, canvas.height * 0.22);
 
             ctx.font = `${conceptFontSize}px Arial`;
             ctx.fillStyle = '#ffd700';
@@ -1055,7 +1056,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.22', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.23', canvas.width - 10, canvas.height - 10);
         }
 
         /**
