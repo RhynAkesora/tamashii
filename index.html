@@ -166,7 +166,7 @@
         // Firebase SDKのインポート
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, query, limit, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // Canvas要素とコンテキストの取得
         const canvas = document.getElementById('gameCanvas');
@@ -459,7 +459,7 @@
                     name: playerName,
                     score: finalScore,
                     maxCombo: finalMaxCombo,
-                    createdAt: new Date()
+                    createdAt: serverTimestamp()
                 });
                 console.log("ハイスコアを保存しました。");
             } catch (error) {
