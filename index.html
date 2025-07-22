@@ -332,8 +332,8 @@
             filter.frequency.exponentialRampToValueAtTime(baseFreq * 3, now + 0.15);
 
             const gainNode = audioCtx.createGain();
-            // ★★★ 変更点: ブロック消去音の音量をさらにアップ ★★★
-            gainNode.gain.setValueAtTime(1.0, now);
+            // ★★★ ブロック消去音 ★★★
+            gainNode.gain.setValueAtTime(2.0, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
             noiseSource.connect(filter).connect(gainNode).connect(masterGain);
@@ -736,7 +736,7 @@
         }
 
         /**
-         * 指定された色の連結成分を見つける（最適化版）
+         * 指定された色の連結成分を見つける
          * @param {number} color - 探索対象の色のインデックス
          */
         function findConnectedComponents(color) {
@@ -765,7 +765,7 @@
         }
 
         /**
-         * 深度優先探索（反復版）で連結成分を探索する
+         * 深度優先探索で連結成分を探索する
          * @param {object} startParticle - 開始地点のパーティクル
          * @param {Set<string>} visited - 訪問済みパーティクルのキーのセット
          * @param {Set<string>} component - 現在の連結成分のキーのセット
