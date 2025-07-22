@@ -333,7 +333,7 @@
 
             const gainNode = audioCtx.createGain();
             // ★★★ ブロック消去音 ★★★
-            gainNode.gain.setValueAtTime(2.0, now);
+            gainNode.gain.setValueAtTime(3.0, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
             noiseSource.connect(filter).connect(gainNode).connect(masterGain);
@@ -1055,7 +1055,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.21', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.22', canvas.width - 10, canvas.height - 10);
         }
 
         /**
