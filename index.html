@@ -199,7 +199,6 @@
         const NEXT_PIECE_PADDING = 10;
         const NEXT_PIECE_LABEL = 'NEXT';
         const SPEED_INCREASE_RATE = 0.975;
-        // ★★★ 修正点: 速度が上がるまでのライン数を5から4に変更 ★★★
         const SPEED_INCREASE_INTERVAL = 4;
 
         // ゲーム変数
@@ -259,7 +258,7 @@
                 try {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                     masterGain = audioCtx.createGain();
-                    masterGain.gain.value = 0.7; 
+                    masterGain.gain.value = 1.0; 
                     masterGain.connect(audioCtx.destination);
                     soundsEnabled = true;
                     console.log("AudioContextが正常に初期化されました。");
@@ -273,17 +272,17 @@
         
         function playMoveSound() {
             if (!soundsEnabled || !audioCtx) return;
-            playSound({ frequency: 220, type: 'square', duration: 0.05, volume: 0.15 });
+            playSound({ frequency: 220, type: 'square', duration: 0.05, volume: 0.4 });
         }
 
         function playRotateSound() {
             if (!soundsEnabled || !audioCtx) return;
-            playSound({ frequency: 330, type: 'triangle', duration: 0.08, volume: 0.2 });
+            playSound({ frequency: 330, type: 'triangle', duration: 0.08, volume: 0.5 });
         }
 
         function playDropSound() {
             if (!soundsEnabled || !audioCtx) return;
-            playSound({ frequency: 400, type: 'sawtooth', duration: 0.15, volume: 0.3, sweep: -200 });
+            playSound({ frequency: 400, type: 'sawtooth', duration: 0.15, volume: 0.6, sweep: -200 });
         }
         
         function playLandSound() {
@@ -305,7 +304,7 @@
             filter.frequency.exponentialRampToValueAtTime(100, now + 0.08);
 
             const gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(0.4, now);
+            gainNode.gain.setValueAtTime(0.8, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
             noiseSource.connect(filter).connect(gainNode).connect(masterGain);
@@ -333,7 +332,8 @@
             filter.frequency.exponentialRampToValueAtTime(baseFreq * 3, now + 0.15);
 
             const gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(0.35, now);
+            // ★★★ 変更点: ブロック消去音の音量をさらにアップ ★★★
+            gainNode.gain.setValueAtTime(1.0, now);
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
             noiseSource.connect(filter).connect(gainNode).connect(masterGain);
@@ -353,7 +353,7 @@
                 osc.frequency.exponentialRampToValueAtTime(freq / 2, now + 1.2);
 
                 const gainNode = audioCtx.createGain();
-                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.setValueAtTime(0.65, now);
                 gainNode.gain.linearRampToValueAtTime(0, now + 1.2);
 
                 osc.connect(gainNode).connect(masterGain);
@@ -1055,7 +1055,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 1.20', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 1.21', canvas.width - 10, canvas.height - 10);
         }
 
         /**
