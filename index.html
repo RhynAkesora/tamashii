@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>魂テトリス</title>
+    <title>魂の共鳴</title>
     
     <!-- PWA用メタタグ -->
-    <meta name="description" content="魂のステージを上げるテトリスゲーム - 魂テトリス">
+    <meta name="description" content="魂のステージを上げるパズルゲーム - 魂の共鳴">
     <meta name="theme-color" content="#2c5aa0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="魂テトリス">
+    <meta name="apple-mobile-web-app-title" content="魂の共鳴">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -184,7 +184,7 @@
         const cellDivisions = 5;
         const colors = ['#FF0000', '#0000FF', '#00FF00', '#FFFF00'];
         
-        // テトリスピースの定義
+        // パズルピースの定義
         const pieces = [
             [[1,1,1,1]], // I字
             [[1,1],[1,1]], // O字
@@ -565,7 +565,7 @@
         }
 
         /**
-         * 新しいテトリスピースを作成する
+         * 新しいパズルピースを作成する
          */
         function createPiece() {
             const pieceType = Math.floor(Math.random() * pieces.length);
@@ -1027,8 +1027,8 @@
             ctx.textAlign = 'center';
             ctx.strokeStyle = 'black';
             ctx.lineWidth = 2;
-            ctx.strokeText('魂テトリス', canvas.width / 2, canvas.height * 0.15);
-            ctx.fillText('魂テトリス', canvas.width / 2, canvas.height * 0.15);
+            ctx.strokeText('魂の共鳴', canvas.width / 2, canvas.height * 0.15);
+            ctx.fillText('魂の共鳴', canvas.width / 2, canvas.height * 0.15);
 
             ctx.font = `${subtitleFontSize}px Arial`;
             ctx.fillStyle = '#cccccc';
