@@ -1,7 +1,7 @@
 {
-  "name": "魂テトリス",
-  "short_name": "魂テトリス",
-  "description": "瞑想的なテトリスゲーム",
+  "name": "魂の共鳴",
+  "short_name": "魂の共鳴",
+  "description": "魂のステージを上げるパズルゲーム - 魂の共鳴",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#1a1a2e",
