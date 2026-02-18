@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tamashii-tetris-v052';
+const CACHE_NAME = 'tamashii-tetris-v201';
 const urlsToCache = [
   './',
   './index.html',
