@@ -226,6 +226,7 @@
         let fallSpeed = 30;
         let totalLinesCleared = 0;
         let yogaImage = null;
+        let logoImage = null;
         let bgmAudio = null;
         let gameoverBgmAudio = null;
         let titleBgmAudio = null;
@@ -243,10 +244,18 @@
         // ゲームオーバー画面のタップ受付フラグ
         let gameOverReady = false;
 
+        // サウンドミュート
+        let soundMuted = false;
+
         // エフェクト関連の変数
         let visualEffects = [];
+        let floatingTexts = [];
         let shakeDuration = 0;
         let shakeIntensity = 0;
+        let yogaGlowLevel = 0;
+        let yogaGlowTimer = 0;
+        let yogaOffCanvas = null;
+        let yogaOffCtx = null;
 
         // Firebase関連の変数
         let db;
@@ -306,7 +315,7 @@
                 try {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                     masterGain = audioCtx.createGain();
-                    masterGain.gain.value = 1.0; 
+                    masterGain.gain.value = soundMuted ? 0 : 1.0;
                     masterGain.connect(audioCtx.destination);
                     soundsEnabled = true;
                     console.log("AudioContextが正常に初期化されました。");
@@ -460,29 +469,39 @@
             ctx.globalCompositeOperation = 'source-over';
         }
         
-        function clearComponentAndCreateEffect(component) {
-            for (const key of component) {
-                if (Math.random() < 0.1) {
-                    const pX = key % SAND_GRID_WIDTH;
-                    const pY = (key - pX) / SAND_GRID_WIDTH;
-                    for (let i = 0; i < 3; i++) {
-                        visualEffects.push({
-                            x: pX * sandSize,
-                            y: pY * sandSize,
-                            vx: (Math.random() - 0.5) * 4,
-                            vy: (Math.random() - 0.5) * 4,
-                            color: '#FFFFFF',
-                            alpha: 1.0,
-                            size: Math.random() * 2 + 1,
-                            lifespan: 60
-                        });
-                    }
-                }
-            }
-            sandParticles = sandParticles.filter(p => !component.has(p.y * SAND_GRID_WIDTH + p.x));
-            cellOccupied = null;
+        function addFloatingText(text, x, y, color = '#ffd700') {
+            floatingTexts.push({
+                text, x, y,
+                vy: -1.5,
+                alpha: 1.0,
+                lifespan: 60,
+                color,
+                fontSize: Math.max(14, cellSize * 0.8)
+            });
         }
 
+        function updateAndDrawFloatingTexts() {
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y += ft.vy;
+                ft.lifespan--;
+                ft.alpha = ft.lifespan / 60;
+
+                if (ft.lifespan <= 0) {
+                    floatingTexts.splice(i, 1);
+                } else {
+                    ctx.globalAlpha = ft.alpha;
+                    ctx.font = `bold ${ft.fontSize}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.lineWidth = 3;
+                    ctx.strokeText(ft.text, ft.x, ft.y);
+                    ctx.fillStyle = ft.color;
+                    ctx.fillText(ft.text, ft.x, ft.y);
+                }
+            }
+            ctx.globalAlpha = 1.0;
+        }
 
         async function initFirebase() {
             if (!firebaseApp || !firebaseAuth || !firebaseFirestore) {
@@ -511,6 +530,17 @@
          */
         async function saveHighScore(playerName, finalScore, finalMaxCombo) {
             if (!db || !firebaseFirestore) return;
+
+            // クライアント側バリデーション（Firestoreルールと整合）
+            if (typeof playerName !== 'string' || playerName.length === 0) {
+                playerName = 'ななし';
+            }
+            playerName = playerName.slice(0, 10);
+            if (!Number.isFinite(finalScore) || finalScore <= 0) return;
+            if (!Number.isFinite(finalMaxCombo) || finalMaxCombo < 0) return;
+            finalScore = Math.floor(finalScore);
+            finalMaxCombo = Math.floor(finalMaxCombo);
+
             try {
                 const { collection, addDoc, serverTimestamp } = firebaseFirestore;
                 await addDoc(collection(db, "scores"), {
@@ -556,11 +586,11 @@
             const scoreDisplayHeight = 30;
             const pauseButtonHeight = 32;
             const pauseButtonMargin = 5;
-            const scoreCanvasMargin = 10;
-            const topPageMargin = 15;
+            const scoreCanvasMargin = 4;
+            const topPageMargin = 5;
 
             const tempAvailableHeight = containerHeight - (topPageMargin + pauseButtonHeight + pauseButtonMargin + scoreDisplayHeight + scoreCanvasMargin);
-            const nextPieceWidth = Math.ceil(gridWidth * 0.4);
+            const nextPieceWidth = Math.ceil(gridWidth * 0.3);
             const aspectRatio = (gridWidth + nextPieceWidth) / gridHeight;
             let tempNewWidth, tempNewHeight;
 
@@ -654,6 +684,52 @@
         }
 
         /**
+         * 積み上がり危険レベルを判定する
+         * @returns {number} 0:安全, 1:警告, 2:危険
+         */
+        function getDangerLevel() {
+            if (!cellOccupied) rebuildCellOccupied();
+            for (let x = 0; x < gridWidth; x++) {
+                if (cellOccupied.has(0 * gridWidth + x) || cellOccupied.has(1 * gridWidth + x)) return 2;
+            }
+            for (let x = 0; x < gridWidth; x++) {
+                if (cellOccupied.has(2 * gridWidth + x)) return 1;
+            }
+            return 0;
+        }
+
+        /**
+         * 積み上がり警告を描画する
+         */
+        function drawDangerWarning(level) {
+            const gameAreaWidth = cellSize * gridWidth;
+            if (level === 1) {
+                // 警告: 上部に赤い半透明グラデーション
+                const grad = ctx.createLinearGradient(0, 0, 0, cellSize * 4);
+                grad.addColorStop(0, 'rgba(255, 0, 0, 0.25)');
+                grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, gameAreaWidth, cellSize * 4);
+            } else if (level === 2) {
+                // 危険: 濃い赤 + 点滅
+                const blink = Math.sin(frameCount * 0.3) * 0.5 + 0.5;
+                const grad = ctx.createLinearGradient(0, 0, 0, cellSize * 5);
+                grad.addColorStop(0, `rgba(255, 0, 0, ${0.2 + blink * 0.25})`);
+                grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, gameAreaWidth, cellSize * 5);
+
+                // DANGERテキスト
+                ctx.globalAlpha = 0.4 + blink * 0.4;
+                ctx.fillStyle = '#ff0000';
+                ctx.font = `bold ${Math.max(16, cellSize * 1.5)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText('DANGER', gameAreaWidth / 2, cellSize * 2);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        /**
          * 砂漠の背景を描画する
          */
         function drawDesertBackground() {
@@ -689,6 +765,40 @@
         }
 
         /**
+         * ゴーストピース（落下先プレビュー）を描画する
+         */
+        function drawGhostPiece() {
+            if (!currentPiece) return;
+            // 着地Y座標を求める
+            let ghostY = currentPiece.y;
+            const origY = currentPiece.y;
+            while (true) {
+                currentPiece.y = ghostY + 1;
+                if (!canMove(0, 0)) break;
+                ghostY++;
+            }
+            currentPiece.y = origY;
+
+            if (ghostY === origY) return; // 真下が着地点なら表示不要
+
+            ctx.globalAlpha = 0.25;
+            ctx.fillStyle = colors[currentPiece.color];
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            for (let y = 0; y < currentPiece.shape.length; y++) {
+                for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                    if (currentPiece.shape[y][x]) {
+                        const px = (currentPiece.x + x) * cellSize;
+                        const py = (ghostY + y) * cellSize;
+                        ctx.fillRect(px, py, cellSize - 1, cellSize - 1);
+                        ctx.strokeRect(px, py, cellSize - 1, cellSize - 1);
+                    }
+                }
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        /**
          * 次のピースを描画する
          */
         function drawNextPiece() {
@@ -696,9 +806,9 @@
             const gameAreaWidth = cellSize * gridWidth;
             const nextPieceAreaWidth = canvas.width - gameAreaWidth;
             const centerX = gameAreaWidth + nextPieceAreaWidth / 2;
-            const nextPieceSize = Math.min(cellSize * 0.8, (nextPieceAreaWidth - NEXT_PIECE_PADDING * 2) / 4);
+            const nextPieceSize = Math.min(cellSize * 0.6, (nextPieceAreaWidth - NEXT_PIECE_PADDING * 2) / 4);
             const nextPieceX = gameAreaWidth + (nextPieceAreaWidth - nextPieceSize * 4) / 2;
-            const nextPieceY = NEXT_PIECE_PADDING * 2 + 20;
+            const nextPieceY = NEXT_PIECE_PADDING + 18;
 
             // 背景
             ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
@@ -714,9 +824,9 @@
 
             // NEXTラベル
             ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
+            ctx.font = `${Math.max(12, nextPieceAreaWidth * 0.16)}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillText(NEXT_PIECE_LABEL, centerX, NEXT_PIECE_PADDING + 20);
+            ctx.fillText(NEXT_PIECE_LABEL, centerX, NEXT_PIECE_PADDING + 14);
 
             // NEXTピース背景
             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
@@ -738,7 +848,7 @@
             }
 
             // --- NEXTピースの下: 消去ライン数 ---
-            const infoY = nextPieceY + nextPieceSize * 4 + 30;
+            const infoY = nextPieceY + nextPieceSize * 4 + 20;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.font = `${Math.max(10, nextPieceAreaWidth * 0.12)}px Arial`;
             ctx.textAlign = 'center';
@@ -748,7 +858,7 @@
             ctx.font = `bold ${Math.max(16, nextPieceAreaWidth * 0.22)}px Arial`;
             ctx.fillText(`${totalLinesCleared}`, centerX, infoY + Math.max(20, nextPieceAreaWidth * 0.2));
 
-            // --- ヨガ行者（半透明・小さめ） ---
+            // --- ヨガ行者（コンボエフェクト付き・シルエットマスク方式） ---
             if (yogaImage) {
                 const yogaTopY = infoY + Math.max(20, nextPieceAreaWidth * 0.2) + 20;
                 const availableH = canvas.height - yogaTopY - 10;
@@ -759,9 +869,74 @@
                     const imgH = yogaImage.height * scale;
                     const imgX = centerX - imgW / 2;
                     const imgY = yogaTopY + (availableH - imgH) / 2;
-                    ctx.globalAlpha = 0.25;
+                    const yogaCenterX = centerX;
+                    const yogaCenterY = imgY + imgH / 2;
+
+                    const level = Math.min(yogaGlowLevel, 4);
+                    const isGlowing = yogaGlowLevel >= 1 && yogaGlowTimer > 0;
+
+                    // 後光（level 3+）— 円形の radialGradient
+                    if (isGlowing && level >= 3) {
+                        const haloRadius = Math.max(imgW, imgH) / 2 + 20;
+                        const pulse = Math.sin(frameCount * 0.12) * 0.12;
+                        const haloAlpha = level >= 4 ? 0.35 + pulse : 0.18 + pulse;
+                        const haloSize = level >= 4 ? haloRadius * (1.3 + pulse) : haloRadius;
+                        const haloGrad = ctx.createRadialGradient(yogaCenterX, yogaCenterY, 0, yogaCenterX, yogaCenterY, haloSize);
+                        const haloColor = level >= 4 ? '255, 255, 255' : '255, 221, 68';
+                        haloGrad.addColorStop(0, `rgba(${haloColor}, ${haloAlpha})`);
+                        haloGrad.addColorStop(0.5, `rgba(${haloColor}, ${haloAlpha * 0.4})`);
+                        haloGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                        ctx.save();
+                        ctx.fillStyle = haloGrad;
+                        ctx.beginPath();
+                        ctx.arc(yogaCenterX, yogaCenterY, haloSize, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+
+                    // ベース画像描画（レベルに応じてalpha上昇）
+                    const baseAlphas = [0.25, 0.35, 0.45, 0.55, 0.7];
+                    const targetAlpha = isGlowing ? baseAlphas[level] : 0.25;
+                    ctx.globalAlpha = targetAlpha;
                     ctx.drawImage(yogaImage, imgX, imgY, imgW, imgH);
                     ctx.globalAlpha = 1.0;
+
+                    // シルエットマスク色オーバーレイ（level 1+）
+                    // オフスクリーンキャンバスで画像のアルファ部分だけに色を乗せる
+                    if (isGlowing) {
+                        const offW = Math.ceil(imgW);
+                        const offH = Math.ceil(imgH);
+                        if (!yogaOffCanvas) {
+                            yogaOffCanvas = document.createElement('canvas');
+                            yogaOffCtx = yogaOffCanvas.getContext('2d');
+                        }
+                        if (yogaOffCanvas.width !== offW || yogaOffCanvas.height !== offH) {
+                            yogaOffCanvas.width = offW;
+                            yogaOffCanvas.height = offH;
+                        }
+
+                        // オフスクリーンにヨガ画像を描画
+                        yogaOffCtx.clearRect(0, 0, offW, offH);
+                        yogaOffCtx.globalCompositeOperation = 'source-over';
+                        yogaOffCtx.globalAlpha = 1.0;
+                        yogaOffCtx.drawImage(yogaImage, 0, 0, offW, offH);
+
+                        // source-atop: 画像の不透明部分にだけ色を乗せる
+                        yogaOffCtx.globalCompositeOperation = 'source-atop';
+                        const glowColors = ['', '#ff3333', '#ff6600', '#ffcc33', '#ffffff'];
+                        yogaOffCtx.fillStyle = glowColors[level];
+                        yogaOffCtx.fillRect(0, 0, offW, offH);
+                        yogaOffCtx.globalCompositeOperation = 'source-over';
+
+                        // メインキャンバスに加算合成で重ねる
+                        const glowAlphas = [0, 0.25, 0.3, 0.35, 0.5];
+                        const pulse = Math.sin(frameCount * 0.2) * 0.08;
+                        ctx.globalCompositeOperation = 'lighter';
+                        ctx.globalAlpha = glowAlphas[level] + pulse;
+                        ctx.drawImage(yogaOffCanvas, imgX, imgY);
+                        ctx.globalCompositeOperation = 'source-over';
+                        ctx.globalAlpha = 1.0;
+                    }
                 }
             }
         }
@@ -1048,11 +1223,13 @@
             if (db) {
                 await fetchHighScores();
 
-                if (highScores.length < 10 || score > highScores[highScores.length - 1].score) {
+                if (score > 0 && (highScores.length < 10 || score > highScores[highScores.length - 1].score)) {
                     setTimeout(() => {
                         playHighScoreBGM();
                     }, 1000);
+                    playerNameInput.value = '';
                     nameInputModal.style.display = 'flex';
+                    playerNameInput.focus();
                 } else {
                     playGameOverBGMDelayed();
                     drawGameOverScreen();
@@ -1099,10 +1276,25 @@
             ctx.textAlign = 'center';
             ctx.fillText('Please Tap', canvas.width / 2, canvas.height / 2 - 20);
             
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.font = `${creditFontSize}px Arial`;
-            const creditY = canvas.height - (isSmallScreen ? 20 : 30);
-            ctx.fillText('Presented by NullPo Works', canvas.width / 2, creditY);
+            // ロゴ画像（白ロゴをそのまま表示）
+            if (logoImage) {
+                const maxW = canvas.width * 0.45;
+                const maxH = canvas.height * 0.12;
+                const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height);
+                const imgW = logoImage.width * scale;
+                const imgH = logoImage.height * scale;
+                const imgX = (canvas.width - imgW) / 2;
+                const imgY = canvas.height - imgH - (isSmallScreen ? 15 : 25);
+
+                ctx.globalAlpha = 0.7;
+                ctx.drawImage(logoImage, imgX, imgY, imgW, imgH);
+                ctx.globalAlpha = 1.0;
+            } else {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = `${creditFontSize}px Arial`;
+                const creditY = canvas.height - (isSmallScreen ? 20 : 30);
+                ctx.fillText('Presented by NullPo Works', canvas.width / 2, creditY);
+            }
         }
         
         /**
@@ -1149,6 +1341,7 @@
             ctx.fillText('邪気を浄化して魂のステージを上げよう！', canvas.width / 2, conceptY);
 
             drawHighScoreButton();
+            drawSoundButton();
 
             ctx.font = `${instructionFontSize}px Arial`;
             ctx.fillStyle = 'white';
@@ -1158,7 +1351,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 2.01', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 2.10', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1221,9 +1414,9 @@
             if (highScoreBgmAudio && !highScoreBgmAudio.paused) { highScoreBgmAudio.pause(); highScoreBgmAudio.currentTime = 0; }
         }
 
-        function playBGM() { stopAllBGM(); if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playTitleBGM() { stopAllBGM(); if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playGameOverBGM() { stopAllBGM(); if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
+        function playBGM() { stopAllBGM(); if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.volume = soundMuted ? 0 : 0.7; bgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playTitleBGM() { stopAllBGM(); if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.volume = soundMuted ? 0 : 0.7; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playGameOverBGM() { stopAllBGM(); if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = soundMuted ? 0 : 0.7; gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
         function playGameOverBGMDelayed() {
             stopAllBGM();
             if (!gameoverBgmAudio) return;
@@ -1234,13 +1427,23 @@
                 setTimeout(() => {
                     if (gameState === 'gameOver' && gameoverBgmAudio) {
                         gameoverBgmAudio.currentTime = 0;
-                        gameoverBgmAudio.volume = 0.7;
+                        gameoverBgmAudio.volume = soundMuted ? 0 : 0.7;
                     }
                 }, 1300);
             } catch (e) {}
         }
-        function playHighScoreBGM() { stopAllBGM(); if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
-        
+        function playHighScoreBGM() { stopAllBGM(); if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.volume = soundMuted ? 0 : 0.7; highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
+
+        function toggleSound() {
+            soundMuted = !soundMuted;
+            const vol = soundMuted ? 0 : 0.7;
+            if (masterGain) masterGain.gain.value = soundMuted ? 0 : 1.0;
+            if (bgmAudio) bgmAudio.volume = vol;
+            if (titleBgmAudio) titleBgmAudio.volume = vol;
+            if (gameoverBgmAudio) gameoverBgmAudio.volume = vol;
+            if (highScoreBgmAudio) highScoreBgmAudio.volume = vol;
+        }
+
         /**
          * ヨガ画像を読み込む
          */
@@ -1249,6 +1452,16 @@
             img.onload = () => { yogaImage = img; if (gameState === 'title') { drawTitleScreen(); } };
             img.onerror = () => { console.error('ヨガ画像の読み込みに失敗しました'); yogaImage = null; };
             img.src = 'yoga01.png';
+        }
+
+        /**
+         * ロゴ画像を読み込む
+         */
+        function loadLogoImage() {
+            const img = new Image();
+            img.onload = () => { logoImage = img; };
+            img.onerror = () => { console.error('ロゴ画像の読み込みに失敗しました'); logoImage = null; };
+            img.src = 'logo-white.png';
         }
 
         /**
@@ -1349,6 +1562,85 @@
         }
 
         /**
+         * サウンドボタンの位置・サイズを取得する
+         */
+        function getSoundButtonRect() {
+            const size = Math.max(30, Math.min(40, canvas.width * 0.08));
+            const margin = 20;
+            return { x: canvas.width - size - margin, y: margin, w: size, h: size };
+        }
+
+        /**
+         * サウンドボタンを描画する（右上アイコン）
+         */
+        function drawSoundButton() {
+            const r = getSoundButtonRect();
+            const cx = r.x + r.w / 2;
+            const cy = r.y + r.h / 2;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.arc(cx, cy, r.w / 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r.w / 2, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // スピーカーアイコン
+            const s = r.w * 0.18;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(cx - s * 2, cy - s, s * 1.5, s * 2);
+            ctx.beginPath();
+            ctx.moveTo(cx - s * 0.5, cy - s);
+            ctx.lineTo(cx + s * 1.2, cy - s * 2);
+            ctx.lineTo(cx + s * 1.2, cy + s * 2);
+            ctx.lineTo(cx - s * 0.5, cy + s);
+            ctx.closePath();
+            ctx.fill();
+
+            if (soundMuted) {
+                // バツ印
+                ctx.strokeStyle = '#ff6666';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(cx - r.w * 0.3, cy - r.w * 0.3);
+                ctx.lineTo(cx + r.w * 0.3, cy + r.w * 0.3);
+                ctx.moveTo(cx + r.w * 0.3, cy - r.w * 0.3);
+                ctx.lineTo(cx - r.w * 0.3, cy + r.w * 0.3);
+                ctx.stroke();
+            } else {
+                // 音波
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1.5;
+                for (let i = 1; i <= 2; i++) {
+                    ctx.beginPath();
+                    ctx.arc(cx + s * 0.5, cy, s * (1 + i * 1.2), -Math.PI * 0.35, Math.PI * 0.35);
+                    ctx.stroke();
+                }
+            }
+
+            // ON/OFFラベル
+            ctx.fillStyle = soundMuted ? '#ff6666' : 'rgba(255, 255, 255, 0.8)';
+            ctx.font = `${Math.max(9, r.w * 0.3)}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText(soundMuted ? 'OFF' : 'ON', cx, r.y + r.h + Math.max(10, r.w * 0.35));
+        }
+
+        /**
+         * サウンドボタンがタップされたかチェックする
+         */
+        function isSoundButtonTapped(x, y) {
+            const r = getSoundButtonRect();
+            const cx = r.x + r.w / 2;
+            const cy = r.y + r.h / 2;
+            const dist = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+            return dist <= r.w / 2 + 5;
+        }
+
+        /**
          * ゲームオーバー画面を描画する
          */
         function drawGameOverScreen() {
@@ -1373,6 +1665,8 @@
         function resetGame() {
             sandParticles = [];
             cellOccupied = null;
+            floatingTexts = [];
+            visualEffects = [];
             score = 0;
             comboCount = 0;
             maxCombo = 0;
@@ -1380,15 +1674,19 @@
             isSettling = false;
             isClearing = false;
             frameCount = 0;
+            yogaGlowLevel = 0;
+            yogaGlowTimer = 0;
+            if (comboDisplayTimeout) clearTimeout(comboDisplayTimeout);
+            comboDisplayElement.style.display = 'none';
             currentPiece = createPiece();
             nextPiece = createPiece();
             fallSpeed = 30;
             updateScoreDisplay();
             gameState = 'playing';
             if (pauseButtonElement) pauseButtonElement.style.display = 'block';
-            
+
             playBGM();
-            
+
             update();
         }
 
@@ -1399,7 +1697,15 @@
             if (gameState !== 'playing') return;
 
             frameCount++;
-            
+
+            // ヨガエフェクトタイマー減算
+            if (yogaGlowTimer > 0) {
+                yogaGlowTimer--;
+                if (yogaGlowTimer <= 0) {
+                    yogaGlowLevel = 0;
+                }
+            }
+
             if (isSettling) {
                 if (!simulateSand()) {
                     isSettling = false;
@@ -1414,15 +1720,42 @@
                     playClearSound(comboCount);
                     
                     const basePoints = clearedLines * 100;
-                    
+                    const floatX = cellSize * gridWidth / 2;
+                    const floatY = cellSize * 3;
+
                     if (comboCount > 1) {
                         const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1));
                         score += comboBonus;
                         showComboDisplay(comboCount, comboBonus);
                         triggerScreenShake(comboCount * 1.5, 15);
+                        addFloatingText(`+${comboBonus} COMBO`, floatX, floatY - 20, '#ff6699');
                     }
                     score += basePoints;
-                    
+                    addFloatingText(`+${basePoints}`, floatX, floatY);
+
+                    // ヨガ行者エフェクト更新
+                    yogaGlowLevel = comboCount;
+                    yogaGlowTimer = 90;
+                    if (comboCount >= 4) {
+                        // クンダリーニ覚醒パーティクル
+                        const gAreaW = cellSize * gridWidth;
+                        const nAreaW = canvas.width - gAreaW;
+                        const yCenterX = gAreaW + nAreaW / 2;
+                        const yCenterY = canvas.height * 0.7;
+                        for (let i = 0; i < 25; i++) {
+                            visualEffects.push({
+                                x: yCenterX + (Math.random() - 0.5) * nAreaW * 0.6,
+                                y: yCenterY + (Math.random() - 0.5) * 30,
+                                vx: (Math.random() - 0.5) * 2,
+                                vy: -(Math.random() * 3 + 1),
+                                color: Math.random() < 0.5 ? '#ffd700' : '#ffffff',
+                                alpha: 1.0,
+                                size: Math.random() * 3 + 1.5,
+                                lifespan: 60 + Math.floor(Math.random() * 30)
+                            });
+                        }
+                    }
+
                     const prevLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
                     totalLinesCleared += clearedLines;
                     const currentLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
@@ -1470,12 +1803,16 @@
             }
 
             drawGrid();
+            const dangerLevel = getDangerLevel();
+            if (dangerLevel > 0) drawDangerWarning(dangerLevel);
             if (currentPiece && !isSettling && !isClearing) {
+                drawGhostPiece();
                 drawPiece();
             }
             drawNextPiece();
 
             updateAndDrawEffects();
+            updateAndDrawFloatingTexts();
 
             ctx.restore();
 
@@ -1552,7 +1889,10 @@
                     drawTitleScreen();
                     break;
                 case 'title':
-                    if (isHighScoreButtonTapped(x, y)) {
+                    if (isSoundButtonTapped(x, y)) {
+                        toggleSound();
+                        drawTitleScreen();
+                    } else if (isHighScoreButtonTapped(x, y)) {
                         gameState = 'highscore';
                         drawHighScoreScreen(true);
                         await fetchHighScores();
@@ -1589,6 +1929,18 @@
             };
         }
 
+        function getConfirmButtons() {
+            const btnWidth = Math.min(canvas.width * 0.5, 200);
+            const btnHeight = 45;
+            const btnX = canvas.width / 2 - btnWidth / 2;
+            const gap = 20;
+            const topY = canvas.height * 0.3;
+            return {
+                yes: { x: btnX, y: topY, w: btnWidth, h: btnHeight },
+                no: { x: btnX, y: topY + btnHeight + gap, w: btnWidth, h: btnHeight }
+            };
+        }
+
         /**
          * ポーズ画面を描画する
          */
@@ -1600,31 +1952,31 @@
 
             if (pauseConfirmQuit) {
                 // 確認ダイアログ
-                ctx.fillStyle = 'white';
+                const cbtns = getConfirmButtons();
+
+                ctx.fillStyle = '#ffd700';
                 ctx.font = '20px Arial';
-                ctx.fillText('タイトル画面に戻りますか？', canvas.width / 2, canvas.height / 2 - 60);
+                ctx.fillText('タイトル画面に戻りますか？', canvas.width / 2, cbtns.yes.y - 30);
 
-                const btns = getPauseButtons();
-
-                // はいボタン
-                ctx.fillStyle = 'rgba(160, 44, 44, 0.8)';
-                ctx.fillRect(btns.resume.x, btns.resume.y, btns.resume.w, btns.resume.h);
+                // はいボタン（緑系）
+                ctx.fillStyle = 'rgba(44, 130, 60, 0.8)';
+                ctx.fillRect(cbtns.yes.x, cbtns.yes.y, cbtns.yes.w, cbtns.yes.h);
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(btns.resume.x, btns.resume.y, btns.resume.w, btns.resume.h);
+                ctx.strokeRect(cbtns.yes.x, cbtns.yes.y, cbtns.yes.w, cbtns.yes.h);
                 ctx.fillStyle = 'white';
                 ctx.font = '20px Arial';
-                ctx.fillText('はい', canvas.width / 2, btns.resume.y + btns.resume.h / 2);
+                ctx.fillText('はい', canvas.width / 2, cbtns.yes.y + cbtns.yes.h / 2);
 
-                // いいえボタン
-                ctx.fillStyle = 'rgba(44, 90, 160, 0.8)';
-                ctx.fillRect(btns.quit.x, btns.quit.y, btns.quit.w, btns.quit.h);
+                // いいえボタン（グレー系）
+                ctx.fillStyle = 'rgba(80, 80, 80, 0.8)';
+                ctx.fillRect(cbtns.no.x, cbtns.no.y, cbtns.no.w, cbtns.no.h);
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(btns.quit.x, btns.quit.y, btns.quit.w, btns.quit.h);
+                ctx.strokeRect(cbtns.no.x, cbtns.no.y, cbtns.no.w, cbtns.no.h);
                 ctx.fillStyle = 'white';
                 ctx.font = '20px Arial';
-                ctx.fillText('いいえ', canvas.width / 2, btns.quit.y + btns.quit.h / 2);
+                ctx.fillText('いいえ', canvas.width / 2, cbtns.no.y + cbtns.no.h / 2);
             } else {
                 // 通常ポーズ画面
                 ctx.fillStyle = 'white';
@@ -1653,29 +2005,32 @@
                 ctx.font = '20px Arial';
                 ctx.fillText('タイトルに戻る', canvas.width / 2, btns.quit.y + btns.quit.h / 2);
             }
+            ctx.textBaseline = 'alphabetic';
         }
 
         /**
          * ポーズ画面のタップ処理
          */
         function handlePauseTap(x, y) {
-            const btns = getPauseButtons();
-            const hitResume = x >= btns.resume.x && x <= btns.resume.x + btns.resume.w &&
-                              y >= btns.resume.y && y <= btns.resume.y + btns.resume.h;
-            const hitQuit = x >= btns.quit.x && x <= btns.quit.x + btns.quit.w &&
-                            y >= btns.quit.y && y <= btns.quit.y + btns.quit.h;
-
             if (pauseConfirmQuit) {
-                if (hitResume) {
-                    // 「はい」→タイトルへ
+                const cbtns = getConfirmButtons();
+                const hitYes = x >= cbtns.yes.x && x <= cbtns.yes.x + cbtns.yes.w &&
+                               y >= cbtns.yes.y && y <= cbtns.yes.y + cbtns.yes.h;
+                const hitNo = x >= cbtns.no.x && x <= cbtns.no.x + cbtns.no.w &&
+                              y >= cbtns.no.y && y <= cbtns.no.y + cbtns.no.h;
+                if (hitYes) {
                     pauseConfirmQuit = false;
                     quitToTitle();
-                } else if (hitQuit) {
-                    // 「いいえ」→ポーズ画面に戻る
+                } else if (hitNo) {
                     pauseConfirmQuit = false;
                     drawPauseScreen();
                 }
             } else {
+                const btns = getPauseButtons();
+                const hitResume = x >= btns.resume.x && x <= btns.resume.x + btns.resume.w &&
+                                  y >= btns.resume.y && y <= btns.resume.y + btns.resume.h;
+                const hitQuit = x >= btns.quit.x && x <= btns.quit.x + btns.quit.w &&
+                                y >= btns.quit.y && y <= btns.quit.y + btns.quit.h;
                 if (hitResume) {
                     resumeGame();
                 } else if (hitQuit) {
@@ -1729,9 +2084,12 @@
             });
 
             submitScoreButton.addEventListener('click', async () => {
-                const playerName = playerNameInput.value.trim() || 'ななし';
+                if (submitScoreButton.disabled) return;
+                submitScoreButton.disabled = true;
+                const playerName = (playerNameInput.value.trim() || 'ななし').slice(0, 10);
                 await saveHighScore(playerName, score, maxCombo);
                 nameInputModal.style.display = 'none';
+                submitScoreButton.disabled = false;
                 stopAllBGM();
                 playGameOverBGM();
                 gameOverReady = false;
@@ -1812,6 +2170,8 @@
 
             window.addEventListener('resize', () => {
                 resizeCanvas();
+                // モーダル表示中はcanvas再描画をスキップ
+                if (nameInputModal.style.display === 'flex') return;
                 switch (gameState) {
                     case 'pleaseTap': drawPleaseTapScreen(); break;
                     case 'title': drawTitleScreen(); break;
@@ -1836,7 +2196,8 @@
             loadGameOverBGM();
             loadHighScoreBGM(); 
             loadYogaImage();
-            
+            loadLogoImage();
+
             initEventListeners();
             
             await initFirebase();
