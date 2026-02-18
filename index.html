@@ -1054,9 +1054,7 @@
                     }, 1000);
                     nameInputModal.style.display = 'flex';
                 } else {
-                    setTimeout(() => {
-                        playGameOverBGM();
-                    }, 1300);
+                    playGameOverBGMDelayed();
                     drawGameOverScreen();
                     setTimeout(() => {
                         gameOverReady = true;
@@ -1064,9 +1062,7 @@
                     }, 1000);
                 }
             } else {
-                setTimeout(() => {
-                    playGameOverBGM();
-                }, 1300);
+                playGameOverBGMDelayed();
                 drawGameOverScreen();
                 setTimeout(() => {
                     gameOverReady = true;
@@ -1227,7 +1223,22 @@
 
         function playBGM() { stopAllBGM(); if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.play().catch(e => {}); } catch (e) {} } }
         function playTitleBGM() { stopAllBGM(); if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playGameOverBGM() { stopAllBGM(); if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playGameOverBGM() { stopAllBGM(); if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
+        function playGameOverBGMDelayed() {
+            stopAllBGM();
+            if (!gameoverBgmAudio) return;
+            try {
+                gameoverBgmAudio.currentTime = 0;
+                gameoverBgmAudio.volume = 0;
+                gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e));
+                setTimeout(() => {
+                    if (gameState === 'gameOver' && gameoverBgmAudio) {
+                        gameoverBgmAudio.currentTime = 0;
+                        gameoverBgmAudio.volume = 0.7;
+                    }
+                }, 1300);
+            } catch (e) {}
+        }
         function playHighScoreBGM() { stopAllBGM(); if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
         
         /**
