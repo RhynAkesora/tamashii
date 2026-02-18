@@ -215,6 +215,10 @@
         let frameCount = 0;
         let isSettling = false;
         let isClearing = false;
+        let isFlashing = false;
+        let flashTimer = 0;
+        let flashKeys = null;
+        let pendingClearedLines = 0;
         let comboCount = 0;
         let maxCombo = 0;
         let gameState = 'pleaseTap';
@@ -225,6 +229,8 @@
         let isTouchHolding = false;
         let fallSpeed = 30;
         let totalLinesCleared = 0;
+        let gameStartTime = 0;
+        let playTimeSeconds = 0;
         let yogaImage = null;
         let logoImage = null;
         let bgmAudio = null;
@@ -256,6 +262,12 @@
         let yogaGlowTimer = 0;
         let yogaOffCanvas = null;
         let yogaOffCtx = null;
+        let isFever = false;
+        let feverTimer = 0;
+        const FEVER_DURATION = 480;       // 8秒（60fps × 8）
+        const FEVER_EXTENSION = 180;      // コンボ延長 +3秒
+        const FEVER_COMBO_THRESHOLD = 3;  // 3コンボで発動
+        let feverBgmAudio = null;
 
         // Firebase関連の変数
         let db;
@@ -446,7 +458,8 @@
         function updateAndDrawEffects() {
             ctx.globalCompositeOperation = 'lighter';
 
-            for (let i = visualEffects.length - 1; i >= 0; i--) {
+            let writeIdx = 0;
+            for (let i = 0; i < visualEffects.length; i++) {
                 const p = visualEffects[i];
                 p.x += p.vx;
                 p.y += p.vy;
@@ -454,17 +467,17 @@
                 p.lifespan--;
                 p.alpha = p.lifespan / 60;
 
-                if (p.lifespan <= 0) {
-                    visualEffects.splice(i, 1);
-                } else {
+                if (p.lifespan > 0) {
                     ctx.fillStyle = p.color;
                     ctx.globalAlpha = p.alpha;
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                     ctx.fill();
+                    visualEffects[writeIdx++] = p;
                 }
             }
-            
+            visualEffects.length = writeIdx;
+
             ctx.globalAlpha = 1.0;
             ctx.globalCompositeOperation = 'source-over';
         }
@@ -481,15 +494,14 @@
         }
 
         function updateAndDrawFloatingTexts() {
-            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+            let writeIdx = 0;
+            for (let i = 0; i < floatingTexts.length; i++) {
                 const ft = floatingTexts[i];
                 ft.y += ft.vy;
                 ft.lifespan--;
                 ft.alpha = ft.lifespan / 60;
 
-                if (ft.lifespan <= 0) {
-                    floatingTexts.splice(i, 1);
-                } else {
+                if (ft.lifespan > 0) {
                     ctx.globalAlpha = ft.alpha;
                     ctx.font = `bold ${ft.fontSize}px Arial`;
                     ctx.textAlign = 'center';
@@ -498,8 +510,10 @@
                     ctx.strokeText(ft.text, ft.x, ft.y);
                     ctx.fillStyle = ft.color;
                     ctx.fillText(ft.text, ft.x, ft.y);
+                    floatingTexts[writeIdx++] = ft;
                 }
             }
+            floatingTexts.length = writeIdx;
             ctx.globalAlpha = 1.0;
         }
 
@@ -675,11 +689,17 @@
             drawDesertBackground();
             const gameAreaWidth = cellSize * gridWidth;
             const gameAreaHeight = canvas.height;
-            ctx.fillStyle = '#1a1a2e';
+            ctx.fillStyle = getCurrentBgTheme().game;
             ctx.fillRect(0, 0, gameAreaWidth, gameAreaHeight);
-            for (const particle of sandParticles) {
-                ctx.fillStyle = colors[particle.color];
-                ctx.fillRect(particle.x * sandSize, particle.y * sandSize, sandSize, sandSize);
+            // 色別にバッチ描画（fillStyleの切替回数を最小化）
+            for (let c = 0; c < colors.length; c++) {
+                ctx.fillStyle = colors[c];
+                for (let i = 0; i < sandParticles.length; i++) {
+                    const p = sandParticles[i];
+                    if (p.color === c) {
+                        ctx.fillRect(p.x * sandSize, p.y * sandSize, sandSize, sandSize);
+                    }
+                }
             }
         }
 
@@ -701,15 +721,21 @@
         /**
          * 積み上がり警告を描画する
          */
+        let cachedDangerGrad1 = null;
+        let cachedDangerGrad1Key = 0;
         function drawDangerWarning(level) {
             const gameAreaWidth = cellSize * gridWidth;
             if (level === 1) {
-                // 警告: 上部に赤い半透明グラデーション
-                const grad = ctx.createLinearGradient(0, 0, 0, cellSize * 4);
-                grad.addColorStop(0, 'rgba(255, 0, 0, 0.25)');
-                grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, gameAreaWidth, cellSize * 4);
+                // 警告: 上部に赤い半透明グラデーション（キャッシュ）
+                const h = cellSize * 4;
+                if (cachedDangerGrad1Key !== h) {
+                    cachedDangerGrad1 = ctx.createLinearGradient(0, 0, 0, h);
+                    cachedDangerGrad1.addColorStop(0, 'rgba(255, 0, 0, 0.25)');
+                    cachedDangerGrad1.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                    cachedDangerGrad1Key = h;
+                }
+                ctx.fillStyle = cachedDangerGrad1;
+                ctx.fillRect(0, 0, gameAreaWidth, h);
             } else if (level === 2) {
                 // 危険: 濃い赤 + 点滅
                 const blink = Math.sin(frameCount * 0.3) * 0.5 + 0.5;
@@ -730,18 +756,58 @@
         }
 
         /**
-         * 砂漠の背景を描画する
+         * 砂漠の背景を描画する（レベルに応じて変化、キャッシュ）
          */
+        const bgThemes = [
+            // Lv1-3: 昼の砂漠
+            { c1: '#f4a460', c2: '#daa520', c3: '#cd853f', game: '#1a1a2e' },
+            // Lv4-6: 夕焼けの砂漠
+            { c1: '#e07040', c2: '#c04820', c3: '#a03018', game: '#1a1020' },
+            // Lv7-9: 夜の砂漠
+            { c1: '#2a2050', c2: '#181040', c3: '#100830', game: '#0a0a1a' },
+            // Lv10+: 宇宙
+            { c1: '#0a0028', c2: '#080020', c3: '#050015', game: '#020010' },
+        ];
+        let cachedDesertGrad = null;
+        let cachedDesertKey = '';
+        function getCurrentBgTheme() {
+            const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+            if (level >= 10) return bgThemes[3];
+            if (level >= 7) return bgThemes[2];
+            if (level >= 4) return bgThemes[1];
+            return bgThemes[0];
+        }
         function drawDesertBackground() {
+            const theme = getCurrentBgTheme();
             const gameAreaWidth = cellSize * gridWidth;
             const nextAreaX = gameAreaWidth;
             const nextAreaWidth = canvas.width - gameAreaWidth;
-            const gradient = ctx.createLinearGradient(nextAreaX, 0, canvas.width, 0);
-            gradient.addColorStop(0, '#f4a460');
-            gradient.addColorStop(0.5, '#daa520');
-            gradient.addColorStop(1, '#cd853f');
-            ctx.fillStyle = gradient;
+            const key = `${nextAreaX},${canvas.width},${theme.c1}`;
+            if (key !== cachedDesertKey) {
+                cachedDesertGrad = ctx.createLinearGradient(nextAreaX, 0, canvas.width, 0);
+                cachedDesertGrad.addColorStop(0, theme.c1);
+                cachedDesertGrad.addColorStop(0.5, theme.c2);
+                cachedDesertGrad.addColorStop(1, theme.c3);
+                cachedDesertKey = key;
+            }
+            ctx.fillStyle = cachedDesertGrad;
             ctx.fillRect(nextAreaX, 0, nextAreaWidth, canvas.height);
+
+            // 夜・宇宙テーマ時に星を描画
+            const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+            if (level >= 7) {
+                const starCount = level >= 10 ? 30 : 15;
+                ctx.fillStyle = '#ffffff';
+                for (let i = 0; i < starCount; i++) {
+                    // 決定論的な擬似ランダム位置（フレームごとに動かない）
+                    const sx = nextAreaX + ((i * 7919 + 31) % 100) / 100 * nextAreaWidth;
+                    const sy = ((i * 6271 + 17) % 100) / 100 * canvas.height;
+                    const twinkle = Math.sin(frameCount * 0.05 + i * 1.7) * 0.3 + 0.7;
+                    ctx.globalAlpha = twinkle * (level >= 10 ? 0.9 : 0.5);
+                    ctx.fillRect(sx, sy, 1.5, 1.5);
+                }
+                ctx.globalAlpha = 1.0;
+            }
         }
 
         /**
@@ -847,20 +913,49 @@
                 }
             }
 
-            // --- NEXTピースの下: 消去ライン数 ---
+            // --- NEXTピースの下: 消去ライン数 & コンボ & レベル ---
             const infoY = nextPieceY + nextPieceSize * 4 + 20;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.font = `${Math.max(10, nextPieceAreaWidth * 0.12)}px Arial`;
+            const infoFontSmall = Math.max(10, nextPieceAreaWidth * 0.12);
+            const infoFontLarge = Math.max(16, nextPieceAreaWidth * 0.22);
+            const infoLineH = Math.max(20, nextPieceAreaWidth * 0.2);
             ctx.textAlign = 'center';
-            ctx.fillText('LINES', centerX, infoY);
 
+            // LINES
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.font = `${infoFontSmall}px Arial`;
+            ctx.fillText('LINES', centerX, infoY);
             ctx.fillStyle = '#ffd700';
-            ctx.font = `bold ${Math.max(16, nextPieceAreaWidth * 0.22)}px Arial`;
-            ctx.fillText(`${totalLinesCleared}`, centerX, infoY + Math.max(20, nextPieceAreaWidth * 0.2));
+            ctx.font = `bold ${infoFontLarge}px Arial`;
+            ctx.fillText(`${totalLinesCleared}`, centerX, infoY + infoLineH);
+
+            // COMBO
+            const comboY = infoY + infoLineH + 15;
+            ctx.fillStyle = isFever ? '#ff00ff' : 'rgba(255, 255, 255, 0.6)';
+            ctx.font = `${infoFontSmall}px Arial`;
+            ctx.fillText(isFever ? 'FEVER x2' : 'COMBO', centerX, comboY);
+            if (comboCount > 0) {
+                ctx.fillStyle = isFever ? '#ff00ff' : comboCount >= 4 ? '#ff00ff' : comboCount >= 2 ? '#ff6699' : '#ffd700';
+                ctx.font = `bold ${infoFontLarge}px Arial`;
+                ctx.fillText(`${comboCount}`, centerX, comboY + infoLineH);
+            } else {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.font = `bold ${infoFontLarge}px Arial`;
+                ctx.fillText('0', centerX, comboY + infoLineH);
+            }
+
+            // LEVEL
+            const currentLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+            const levelY = comboY + infoLineH + 15;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.font = `${infoFontSmall}px Arial`;
+            ctx.fillText('LEVEL', centerX, levelY);
+            ctx.fillStyle = '#88ccff';
+            ctx.font = `bold ${infoFontLarge}px Arial`;
+            ctx.fillText(`${currentLevel}`, centerX, levelY + infoLineH);
 
             // --- ヨガ行者（コンボエフェクト付き・シルエットマスク方式） ---
             if (yogaImage) {
-                const yogaTopY = infoY + Math.max(20, nextPieceAreaWidth * 0.2) + 20;
+                const yogaTopY = levelY + infoLineH + 10;
                 const availableH = canvas.height - yogaTopY - 10;
                 const availableW = nextPieceAreaWidth - 20;
                 if (availableH > 30 && availableW > 30) {
@@ -1105,17 +1200,47 @@
                         for (const key of component) {
                             allComponentsToClear.add(key);
                         }
-                        createEffectForComponent(component);
                         clearedLinesCount++;
                     }
                 }
             }
 
             if (clearedLinesCount > 0) {
-                sandParticles = sandParticles.filter(p => !allComponentsToClear.has(p.y * SAND_GRID_WIDTH + p.x));
-                cellOccupied = null;
+                // 即削除せず、フラッシュ演出を開始
+                flashKeys = allComponentsToClear;
+                flashTimer = 18; // 約0.3秒（18フレーム）
+                isFlashing = true;
             }
             return clearedLinesCount;
+        }
+
+        /**
+         * フラッシュ中の粒子を白く光らせて描画する
+         */
+        function drawFlashEffect() {
+            if (!isFlashing || !flashKeys) return;
+            const progress = 1 - (flashTimer / 18); // 0→1
+            const alpha = progress < 0.5 ? progress * 2 : (1 - progress) * 2; // 山型
+            ctx.globalAlpha = 0.5 + alpha * 0.5;
+            ctx.fillStyle = '#ffffff';
+            for (const key of flashKeys) {
+                const pX = key % SAND_GRID_WIDTH;
+                const pY = (key - pX) / SAND_GRID_WIDTH;
+                ctx.fillRect(pX * sandSize, pY * sandSize, sandSize, sandSize);
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        /**
+         * フラッシュ完了時に粒子を実際に削除する
+         */
+        function finishFlash() {
+            if (!flashKeys) return;
+            createEffectForComponent(flashKeys);
+            sandParticles = sandParticles.filter(p => !flashKeys.has(p.y * SAND_GRID_WIDTH + p.x));
+            cellOccupied = null;
+            flashKeys = null;
+            isFlashing = false;
         }
 
         function createEffectForComponent(component) {
@@ -1142,54 +1267,71 @@
 
         /**
          * 砂粒子の物理シミュレーションを実行する
+         * カウントソートでY座標の大きい（下の）粒子から処理し、自然な堆積を実現
          */
+        const SAND_GRID_HEIGHT = gridHeight * cellDivisions; // 95
         function simulateSand() {
             let moved = false;
-            sandParticles.sort((a, b) => b.y - a.y);
 
             const grid = new Set();
-            for (const p of sandParticles) {
+            for (let i = 0; i < sandParticles.length; i++) {
+                const p = sandParticles[i];
                 grid.add(p.y * SAND_GRID_WIDTH + p.x);
             }
 
-            const maxY = gridHeight * cellDivisions - 1;
+            // カウントソート: Y座標ごとのバケットに振り分け
+            const buckets = new Array(SAND_GRID_HEIGHT);
+            for (let i = 0; i < sandParticles.length; i++) {
+                const p = sandParticles[i];
+                const y = p.y;
+                if (!buckets[y]) buckets[y] = [];
+                buckets[y].push(p);
+            }
+
+            const maxY = SAND_GRID_HEIGHT - 1;
             const maxX = SAND_GRID_WIDTH - 1;
 
-            for (const particle of sandParticles) {
-                const currentKey = particle.y * SAND_GRID_WIDTH + particle.x;
+            // 下の行から順に処理
+            for (let row = maxY; row >= 0; row--) {
+                const bucket = buckets[row];
+                if (!bucket) continue;
+                for (let j = 0; j < bucket.length; j++) {
+                    const particle = bucket[j];
+                    const currentKey = particle.y * SAND_GRID_WIDTH + particle.x;
 
-                const belowY = particle.y + 1;
-                if (belowY > maxY) continue;
+                    const belowY = particle.y + 1;
+                    if (belowY > maxY) continue;
 
-                const belowKey = belowY * SAND_GRID_WIDTH + particle.x;
-                if (!grid.has(belowKey)) {
-                    grid.delete(currentKey);
-                    particle.y++;
-                    grid.add(particle.y * SAND_GRID_WIDTH + particle.x);
-                    moved = true;
-                    continue;
-                }
+                    const belowKey = belowY * SAND_GRID_WIDTH + particle.x;
+                    if (!grid.has(belowKey)) {
+                        grid.delete(currentKey);
+                        particle.y++;
+                        grid.add(particle.y * SAND_GRID_WIDTH + particle.x);
+                        moved = true;
+                        continue;
+                    }
 
-                const leftClear = particle.x > 0 && !grid.has(belowY * SAND_GRID_WIDTH + particle.x - 1);
-                const rightClear = particle.x < maxX && !grid.has(belowY * SAND_GRID_WIDTH + particle.x + 1);
+                    const leftClear = particle.x > 0 && !grid.has(belowY * SAND_GRID_WIDTH + particle.x - 1);
+                    const rightClear = particle.x < maxX && !grid.has(belowY * SAND_GRID_WIDTH + particle.x + 1);
 
-                let moveDirection = 0;
+                    let moveDirection = 0;
 
-                // 決定論的なロジック
-                if (leftClear && rightClear) {
-                    moveDirection = (particle.x % 2 === 0) ? -1 : 1;
-                } else if (leftClear) {
-                    moveDirection = -1;
-                } else if (rightClear) {
-                    moveDirection = 1;
-                }
+                    // 疑似ランダムで方向を決定（frameCountで毎フレーム変化）
+                    if (leftClear && rightClear) {
+                        moveDirection = ((particle.x + particle.y + frameCount) & 1) ? -1 : 1;
+                    } else if (leftClear) {
+                        moveDirection = -1;
+                    } else if (rightClear) {
+                        moveDirection = 1;
+                    }
 
-                if (moveDirection !== 0) {
-                    grid.delete(currentKey);
-                    particle.x += moveDirection;
-                    particle.y++;
-                    grid.add(particle.y * SAND_GRID_WIDTH + particle.x);
-                    moved = true;
+                    if (moveDirection !== 0) {
+                        grid.delete(currentKey);
+                        particle.x += moveDirection;
+                        particle.y++;
+                        grid.add(particle.y * SAND_GRID_WIDTH + particle.x);
+                        moved = true;
+                    }
                 }
             }
             if (moved) cellOccupied = null;
@@ -1197,13 +1339,17 @@
         }
 
         /**
-         * スコア表示を更新する
+         * スコア表示を更新する（変更時のみDOM更新）
          */
+        let prevScoreText = '';
         function updateScoreDisplay() {
-            scoreDisplayElement.innerHTML = 
-                `<span>スコア: ${score}</span>` +
+            const text = `<span>スコア: ${score}</span>` +
                 `<span>最高コンボ: ${maxCombo}x</span>` +
                 `<span>速度: ${(30 / fallSpeed).toFixed(2)}x</span>`;
+            if (text !== prevScoreText) {
+                prevScoreText = text;
+                scoreDisplayElement.innerHTML = text;
+            }
         }
 
         /**
@@ -1212,6 +1358,7 @@
         async function gameOver() {
             gameState = 'gameOver';
             gameOverReady = false;
+            playTimeSeconds = Math.floor((Date.now() - gameStartTime) / 1000);
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             cancelAnimationFrame(gameLoop);
             stopAllBGM();
@@ -1351,7 +1498,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 2.10', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 3.00', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1407,11 +1554,23 @@
             } catch (error) { console.error('ハイスコアBGMの初期化に失敗しました:', error); highScoreBgmAudio = null; }
         }
         
+        function loadFeverBGM() {
+            try {
+                feverBgmAudio = new Audio('fever-bgm.mp3');
+                feverBgmAudio.loop = true;
+                feverBgmAudio.volume = 0.7;
+                feverBgmAudio.preload = 'auto';
+                feverBgmAudio.addEventListener('canplaythrough', () => console.log('フィーバーBGMの読み込み完了'));
+                feverBgmAudio.addEventListener('error', (e) => { console.error('フィーバーBGMの読み込みに失敗しました:', e); feverBgmAudio = null; });
+            } catch (error) { console.error('フィーバーBGMの初期化に失敗しました:', error); feverBgmAudio = null; }
+        }
+
         function stopAllBGM() {
             if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
             if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; }
             if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; }
             if (highScoreBgmAudio && !highScoreBgmAudio.paused) { highScoreBgmAudio.pause(); highScoreBgmAudio.currentTime = 0; }
+            if (feverBgmAudio && !feverBgmAudio.paused) { feverBgmAudio.pause(); feverBgmAudio.currentTime = 0; }
         }
 
         function playBGM() { stopAllBGM(); if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.volume = soundMuted ? 0 : 0.7; bgmAudio.play().catch(e => {}); } catch (e) {} } }
@@ -1433,6 +1592,7 @@
             } catch (e) {}
         }
         function playHighScoreBGM() { stopAllBGM(); if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.volume = soundMuted ? 0 : 0.7; highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
+        function playFeverBGM() { stopAllBGM(); if (feverBgmAudio) { try { feverBgmAudio.currentTime = 0; feverBgmAudio.volume = soundMuted ? 0 : 0.7; feverBgmAudio.play().catch(e => {}); } catch(e) {} } }
 
         function toggleSound() {
             soundMuted = !soundMuted;
@@ -1442,6 +1602,7 @@
             if (titleBgmAudio) titleBgmAudio.volume = vol;
             if (gameoverBgmAudio) gameoverBgmAudio.volume = vol;
             if (highScoreBgmAudio) highScoreBgmAudio.volume = vol;
+            if (feverBgmAudio) feverBgmAudio.volume = vol;
         }
 
         /**
@@ -1644,18 +1805,57 @@
          * ゲームオーバー画面を描画する
          */
         function drawGameOverScreen() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'white';
-            ctx.font = '30px Arial';
+            const cx = canvas.width / 2;
+            const baseY = canvas.height * 0.22;
+
+            // タイトル
+            ctx.fillStyle = '#ff4444';
+            ctx.font = 'bold 28px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('ゲームオーバー', canvas.width / 2, canvas.height / 2 - 40);
-            ctx.font = '20px Arial';
-            ctx.fillText(`最終スコア: ${score}`, canvas.width / 2, canvas.height / 2);
+            ctx.fillText('ゲームオーバー', cx, baseY);
+
+            // スコア（大きく強調）
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 36px Arial';
+            ctx.fillText(`${score}`, cx, baseY + 50);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.font = '14px Arial';
+            ctx.fillText('SCORE', cx, baseY + 70);
+
+            // 統計情報
+            const statY = baseY + 105;
+            const lineH = 32;
+            const finalLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+            const minutes = Math.floor(playTimeSeconds / 60);
+            const seconds = playTimeSeconds % 60;
+            const timeStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+
+            const stats = [
+                { label: '消去ライン数', value: `${totalLinesCleared}`, color: '#ffd700' },
+                { label: '最高コンボ', value: `${maxCombo}x`, color: '#ff6699' },
+                { label: '到達レベル', value: `${finalLevel}`, color: '#88ccff' },
+                { label: 'プレイ時間', value: timeStr, color: '#88ff88' },
+            ];
+
+            for (let i = 0; i < stats.length; i++) {
+                const y = statY + i * lineH;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.font = '15px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(stats[i].label, cx - 10, y);
+                ctx.fillStyle = stats[i].color;
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(stats[i].value, cx + 10, y);
+            }
+
             if (gameOverReady) {
                 ctx.font = '16px Arial';
                 ctx.fillStyle = '#cccccc';
-                ctx.fillText('タップしてタイトルに戻る', canvas.width / 2, canvas.height / 2 + 40);
+                ctx.textAlign = 'center';
+                ctx.fillText('タップしてタイトルに戻る', cx, statY + stats.length * lineH + 30);
             }
         }
 
@@ -1673,14 +1873,21 @@
             totalLinesCleared = 0;
             isSettling = false;
             isClearing = false;
+            isFlashing = false;
+            flashTimer = 0;
+            flashKeys = null;
+            pendingClearedLines = 0;
             frameCount = 0;
             yogaGlowLevel = 0;
             yogaGlowTimer = 0;
+            isFever = false;
+            feverTimer = 0;
             if (comboDisplayTimeout) clearTimeout(comboDisplayTimeout);
             comboDisplayElement.style.display = 'none';
             currentPiece = createPiece();
             nextPiece = createPiece();
             fallSpeed = 30;
+            gameStartTime = Date.now();
             updateScoreDisplay();
             gameState = 'playing';
             if (pauseButtonElement) pauseButtonElement.style.display = 'block';
@@ -1706,32 +1913,67 @@
                 }
             }
 
+            // フィーバータイマー減算
+            if (isFever) {
+                feverTimer--;
+                if (feverTimer <= 0) {
+                    isFever = false;
+                    feverTimer = 0;
+                    // 通常BGMに戻す
+                    playBGM();
+                }
+            }
+
             if (isSettling) {
+                // 1フレームに2回シミュレーションして砂の崩れを速める
                 if (!simulateSand()) {
                     isSettling = false;
                     isClearing = true;
+                } else {
+                    simulateSand();
                 }
-            } else if (isClearing) {
-                const clearedLines = checkAndClearLines();
-                
-                if (clearedLines > 0) {
+            } else if (isFlashing) {
+                // ライン消去フラッシュ演出中
+                flashTimer--;
+                if (flashTimer <= 0) {
+                    // フラッシュ完了 → 粒子削除+スコア加算
+                    const clearedLines = pendingClearedLines;
+                    finishFlash();
+
                     comboCount++;
                     maxCombo = Math.max(maxCombo, comboCount);
                     playClearSound(comboCount);
-                    
-                    const basePoints = clearedLines * 100;
+
+                    const feverMultiplier = isFever ? 2 : 1;
+                    const basePoints = clearedLines * 100 * feverMultiplier;
                     const floatX = cellSize * gridWidth / 2;
                     const floatY = cellSize * 3;
 
                     if (comboCount > 1) {
-                        const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1));
+                        const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1)) * feverMultiplier;
                         score += comboBonus;
                         showComboDisplay(comboCount, comboBonus);
                         triggerScreenShake(comboCount * 1.5, 15);
-                        addFloatingText(`+${comboBonus} COMBO`, floatX, floatY - 20, '#ff6699');
+                        addFloatingText(`+${comboBonus} COMBO${isFever ? ' x2' : ''}`, floatX, floatY - 20, isFever ? '#ff00ff' : '#ff6699');
                     }
                     score += basePoints;
-                    addFloatingText(`+${basePoints}`, floatX, floatY);
+                    addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? '#ff00ff' : '#ffd700');
+
+                    // フィーバー発動・延長
+                    if (comboCount >= FEVER_COMBO_THRESHOLD) {
+                        if (!isFever) {
+                            // 新規発動
+                            isFever = true;
+                            feverTimer = FEVER_DURATION;
+                            playFeverBGM();
+                            addFloatingText('FEVER!', floatX, floatY - 50, '#ff00ff');
+                            triggerScreenShake(5, 20);
+                        } else {
+                            // 延長
+                            feverTimer = Math.min(feverTimer + FEVER_EXTENSION, FEVER_DURATION);
+                            addFloatingText('FEVER +3s', floatX, floatY - 50, '#ff00ff');
+                        }
+                    }
 
                     // ヨガ行者エフェクト更新
                     yogaGlowLevel = comboCount;
@@ -1756,6 +1998,34 @@
                         }
                     }
 
+                    // 5コンボ達成 → 全消去ボーナス
+                    if (comboCount >= 5) {
+                        const allClearBonus = 3000;
+                        score += allClearBonus;
+                        addFloatingText(`ALL CLEAR +${allClearBonus}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
+                        triggerScreenShake(8, 25);
+
+                        // 全粒子からエフェクト生成（間引いて軽量化）
+                        for (let i = 0; i < sandParticles.length; i += 25) {
+                            const p = sandParticles[i];
+                            visualEffects.push({
+                                x: p.x * sandSize,
+                                y: p.y * sandSize,
+                                vx: (Math.random() - 0.5) * 6,
+                                vy: -(Math.random() * 5 + 2),
+                                color: colors[p.color],
+                                alpha: 1.0,
+                                size: Math.random() * 3 + 2,
+                                lifespan: 50 + Math.floor(Math.random() * 30)
+                            });
+                        }
+
+                        // 全消去
+                        sandParticles = [];
+                        cellOccupied = null;
+                        comboCount = 0;
+                    }
+
                     const prevLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
                     totalLinesCleared += clearedLines;
                     const currentLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
@@ -1763,10 +2033,17 @@
                     if(currentLinesTier > prevLinesTier) {
                         fallSpeed *= SPEED_INCREASE_RATE;
                     }
-                    
-                    isSettling = true; 
-                    isClearing = false; 
-                    
+
+                    isSettling = true;
+                    isClearing = false;
+                }
+            } else if (isClearing) {
+                const clearedLines = checkAndClearLines();
+
+                if (clearedLines > 0) {
+                    // checkAndClearLinesがフラッシュを開始した
+                    pendingClearedLines = clearedLines;
+                    // isFlashingはcheckAndClearLines内でtrueに設定済み
                 } else {
                     isClearing = false;
                     currentPiece = nextPiece;
@@ -1803,9 +2080,10 @@
             }
 
             drawGrid();
+            if (isFlashing) drawFlashEffect();
             const dangerLevel = getDangerLevel();
             if (dangerLevel > 0) drawDangerWarning(dangerLevel);
-            if (currentPiece && !isSettling && !isClearing) {
+            if (currentPiece && !isSettling && !isClearing && !isFlashing) {
                 drawGhostPiece();
                 drawPiece();
             }
@@ -1813,6 +2091,27 @@
 
             updateAndDrawEffects();
             updateAndDrawFloatingTexts();
+
+            // フィーバー演出
+            if (isFever) {
+                const gameAreaWidth = cellSize * gridWidth;
+                const pulse = Math.sin(frameCount * 0.15) * 0.15 + 0.35;
+                // 画面枠の光
+                ctx.strokeStyle = `rgba(255, 0, 255, ${pulse})`;
+                ctx.lineWidth = 4;
+                ctx.strokeRect(2, 2, gameAreaWidth - 4, canvas.height - 4);
+                // 残り時間バー（画面上部）
+                const barWidth = gameAreaWidth * (feverTimer / FEVER_DURATION);
+                ctx.fillStyle = `rgba(255, 0, 255, ${0.5 + pulse * 0.3})`;
+                ctx.fillRect(0, 0, barWidth, 4);
+                // FEVER x2 テキスト
+                ctx.globalAlpha = 0.3 + Math.sin(frameCount * 0.1) * 0.15;
+                ctx.fillStyle = '#ff00ff';
+                ctx.font = `bold ${Math.max(20, cellSize * 1.2)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText('FEVER x2', gameAreaWidth / 2, canvas.height - 15);
+                ctx.globalAlpha = 1.0;
+            }
 
             ctx.restore();
 
@@ -2194,7 +2493,8 @@
             loadBGM();
             loadTitleBGM();
             loadGameOverBGM();
-            loadHighScoreBGM(); 
+            loadHighScoreBGM();
+            loadFeverBGM();
             loadYogaImage();
             loadLogoImage();
 
@@ -2206,6 +2506,49 @@
             gameState = 'pleaseTap';
             animatePleaseTapScreen();
         }
+
+        // --- デバッグ用（リリース前に削除） ---
+        window.triggerAllClear = function() {
+            if (gameState !== 'playing') { console.log('プレイ中に実行してください'); return; }
+            comboCount = 5;
+            const allClearBonus = 3000;
+            score += allClearBonus;
+            addFloatingText('ALL CLEAR +' + allClearBonus, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
+            triggerScreenShake(8, 25);
+            for (let i = 0; i < sandParticles.length; i += 25) {
+                const p = sandParticles[i];
+                visualEffects.push({
+                    x: p.x * sandSize, y: p.y * sandSize,
+                    vx: (Math.random() - 0.5) * 6, vy: -(Math.random() * 5 + 2),
+                    color: colors[p.color], alpha: 1.0,
+                    size: Math.random() * 3 + 2, lifespan: 50 + Math.floor(Math.random() * 30)
+                });
+            }
+            sandParticles = [];
+            cellOccupied = null;
+            comboCount = 0;
+            yogaGlowLevel = 5;
+            yogaGlowTimer = 90;
+            console.log('全消去発動！');
+        };
+        window.setYogaGlow = function(level) {
+            yogaGlowLevel = level;
+            yogaGlowTimer = 9999;
+            console.log('yogaGlowLevel = ' + level);
+        };
+        window.setLevel = function(lv) {
+            totalLinesCleared = (lv - 1) * SPEED_INCREASE_INTERVAL;
+            fallSpeed = 30 * Math.pow(SPEED_INCREASE_RATE, lv - 1);
+            cachedDesertKey = '';
+            console.log('Level ' + lv + ' (lines=' + totalLinesCleared + ', speed=' + fallSpeed.toFixed(2) + ')');
+        };
+        window.triggerFever = function() {
+            if (gameState !== 'playing') { console.log('プレイ中に実行してください'); return; }
+            isFever = true;
+            feverTimer = FEVER_DURATION;
+            playFeverBGM();
+            console.log('フィーバー発動！（8秒間スコア2倍）');
+        };
 
         // ゲーム開始
         init();
