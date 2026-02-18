@@ -1,10 +1,11 @@
-const CACHE_NAME = 'tamashii-tetris-v201';
+const CACHE_NAME = 'tamashii-tetris-v300';
 const urlsToCache = [
   './',
   './index.html',
   './yoga01.png',
   './soul-stage.mp3',
   './soul-gameover.mp3'
+  './fever-bgm.mp3'
 ];
 
 // インストール時にキャッシュ
