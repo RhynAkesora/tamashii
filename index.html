@@ -268,6 +268,7 @@
         const FEVER_EXTENSION = 180;      // コンボ延長 +3秒
         const FEVER_COMBO_THRESHOLD = 3;  // 3コンボで発動
         let feverBgmAudio = null;
+        let activeBGM = null; // 現在アクティブなBGM（iOS pause/play制御用）
 
         // Firebase関連の変数
         let db;
@@ -1571,38 +1572,45 @@
             if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; }
             if (highScoreBgmAudio && !highScoreBgmAudio.paused) { highScoreBgmAudio.pause(); highScoreBgmAudio.currentTime = 0; }
             if (feverBgmAudio && !feverBgmAudio.paused) { feverBgmAudio.pause(); feverBgmAudio.currentTime = 0; }
+            activeBGM = null;
         }
 
-        function playBGM() { stopAllBGM(); if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.volume = soundMuted ? 0 : 0.7; bgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playTitleBGM() { stopAllBGM(); if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.volume = soundMuted ? 0 : 0.7; titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playGameOverBGM() { stopAllBGM(); if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = soundMuted ? 0 : 0.7; gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
+        function playBGM() { stopAllBGM(); activeBGM = bgmAudio; if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.volume = 0.7; if (!soundMuted) bgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playTitleBGM() { stopAllBGM(); activeBGM = titleBgmAudio; if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.volume = 0.7; if (!soundMuted) titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
+        function playGameOverBGM() { stopAllBGM(); activeBGM = gameoverBgmAudio; if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; if (!soundMuted) gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
         function playGameOverBGMDelayed() {
             stopAllBGM();
+            activeBGM = gameoverBgmAudio;
             if (!gameoverBgmAudio) return;
+            if (soundMuted) return;
             try {
                 gameoverBgmAudio.currentTime = 0;
                 gameoverBgmAudio.volume = 0;
                 gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e));
                 setTimeout(() => {
-                    if (gameState === 'gameOver' && gameoverBgmAudio) {
+                    if (gameState === 'gameOver' && gameoverBgmAudio && !soundMuted) {
                         gameoverBgmAudio.currentTime = 0;
-                        gameoverBgmAudio.volume = soundMuted ? 0 : 0.7;
+                        gameoverBgmAudio.volume = 0.7;
                     }
                 }, 1300);
             } catch (e) {}
         }
-        function playHighScoreBGM() { stopAllBGM(); if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.volume = soundMuted ? 0 : 0.7; highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
-        function playFeverBGM() { stopAllBGM(); if (feverBgmAudio) { try { feverBgmAudio.currentTime = 0; feverBgmAudio.volume = soundMuted ? 0 : 0.7; feverBgmAudio.play().catch(e => {}); } catch(e) {} } }
+        function playHighScoreBGM() { stopAllBGM(); activeBGM = highScoreBgmAudio; if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.volume = 0.7; if (!soundMuted) highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
+        function playFeverBGM() { stopAllBGM(); activeBGM = feverBgmAudio; if (feverBgmAudio) { try { feverBgmAudio.currentTime = 0; feverBgmAudio.volume = 0.7; if (!soundMuted) feverBgmAudio.play().catch(e => {}); } catch(e) {} } }
 
         function toggleSound() {
             soundMuted = !soundMuted;
-            const vol = soundMuted ? 0 : 0.7;
             if (masterGain) masterGain.gain.value = soundMuted ? 0 : 1.0;
-            if (bgmAudio) bgmAudio.volume = vol;
-            if (titleBgmAudio) titleBgmAudio.volume = vol;
-            if (gameoverBgmAudio) gameoverBgmAudio.volume = vol;
-            if (highScoreBgmAudio) highScoreBgmAudio.volume = vol;
-            if (feverBgmAudio) feverBgmAudio.volume = vol;
+            if (soundMuted) {
+                // iOS: volume=0が効かないためpause()で確実に停止
+                if (activeBGM && !activeBGM.paused) activeBGM.pause();
+            } else {
+                // アンミュート: アクティブなBGMを再開
+                if (activeBGM) {
+                    activeBGM.volume = 0.7;
+                    activeBGM.play().catch(e => {});
+                }
+            }
         }
 
         /**
