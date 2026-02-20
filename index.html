@@ -234,9 +234,12 @@
         let yogaImage = null;
         let logoImage = null;
         let bgmAudio = null;
+        let spaceBgmAudio = null;
+        let currentStageBgm = null; // 現在のステージで使うBGM（通常 or 宇宙）
         let gameoverBgmAudio = null;
         let titleBgmAudio = null;
-        let highScoreBgmAudio = null; 
+        let highScoreBgmAudio = null;
+        let flashSoundAudio = null; // ALL CLEAR効果音
         let pleaseTapAnimation = null;
         
         // オーディオ関連の変数
@@ -264,7 +267,7 @@
         let yogaOffCtx = null;
         let isFever = false;
         let feverTimer = 0;
-        const FEVER_DURATION = 480;       // 8秒（60fps × 8）
+        const FEVER_DURATION = 1200;      // 20秒（60fps × 20）
         const FEVER_EXTENSION = 180;      // コンボ延長 +3秒
         const FEVER_COMBO_THRESHOLD = 3;  // 3コンボで発動
         let feverBgmAudio = null;
@@ -281,8 +284,8 @@
         let adsRemoved = false;
         const AD_SHOW_INTERVAL = 3;
 
-        // ★リリース時: IS_PRODUCTION を true に変更する
-        const IS_PRODUCTION = true;
+        // ★本番リリース時: IS_PRODUCTION を true に変更する
+        const IS_PRODUCTION = false;
         const ADMOB_INTERSTITIAL_ID = IS_PRODUCTION
             ? 'ca-app-pub-4148293353679224/9166455565'   // 本番ID
             : 'ca-app-pub-3940256099942544/1033173712';  // テスト用ID
@@ -1499,7 +1502,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.00', canvas.width - 10, canvas.height - 10);
+            ctx.fillText('Ver. 3.02', canvas.width - 10, canvas.height - 10);
         }
 
         /**
@@ -1514,6 +1517,16 @@
                 bgmAudio.addEventListener('canplaythrough', () => console.log('BGMの読み込み完了'));
                 bgmAudio.addEventListener('error', (e) => { console.error('BGMの読み込みに失敗しました:', e); bgmAudio = null; });
             } catch (error) { console.error('BGMの初期化に失敗しました:', error); bgmAudio = null; }
+        }
+        function loadSpaceBGM() {
+            try {
+                spaceBgmAudio = new Audio('soul-space.mp3');
+                spaceBgmAudio.loop = true;
+                spaceBgmAudio.volume = 0.7;
+                spaceBgmAudio.preload = 'auto';
+                spaceBgmAudio.addEventListener('canplaythrough', () => console.log('宇宙BGMの読み込み完了'));
+                spaceBgmAudio.addEventListener('error', (e) => { console.error('宇宙BGMの読み込みに失敗しました:', e); spaceBgmAudio = null; });
+            } catch (error) { console.error('宇宙BGMの初期化に失敗しました:', error); spaceBgmAudio = null; }
         }
 
         /**
@@ -1565,35 +1578,61 @@
                 feverBgmAudio.addEventListener('error', (e) => { console.error('フィーバーBGMの読み込みに失敗しました:', e); feverBgmAudio = null; });
             } catch (error) { console.error('フィーバーBGMの初期化に失敗しました:', error); feverBgmAudio = null; }
         }
+        function loadFlashSound() {
+            try {
+                flashSoundAudio = new Audio('flash.mp3');
+                flashSoundAudio.loop = false;
+                flashSoundAudio.volume = 0.8;
+                flashSoundAudio.preload = 'auto';
+                flashSoundAudio.addEventListener('canplaythrough', () => console.log('全消去SEの読み込み完了'));
+                flashSoundAudio.addEventListener('error', (e) => { console.error('全消去SEの読み込みに失敗しました:', e); flashSoundAudio = null; });
+            } catch (error) { console.error('全消去SEの初期化に失敗しました:', error); flashSoundAudio = null; }
+        }
+
+        function playFlashSound() {
+            if (soundMuted || !flashSoundAudio) return;
+            try {
+                flashSoundAudio.currentTime = 0;
+                flashSoundAudio.volume = 0.8;
+                flashSoundAudio.play().catch(e => {});
+            } catch (e) {}
+        }
+
+        function stopFlashSound() {
+            if (flashSoundAudio && !flashSoundAudio.paused) {
+                flashSoundAudio.pause();
+                flashSoundAudio.currentTime = 0;
+            }
+        }
 
         function stopAllBGM() {
             if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
+            if (spaceBgmAudio && !spaceBgmAudio.paused) { spaceBgmAudio.pause(); spaceBgmAudio.currentTime = 0; }
             if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; }
             if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; }
             if (highScoreBgmAudio && !highScoreBgmAudio.paused) { highScoreBgmAudio.pause(); highScoreBgmAudio.currentTime = 0; }
             if (feverBgmAudio && !feverBgmAudio.paused) { feverBgmAudio.pause(); feverBgmAudio.currentTime = 0; }
+            stopFlashSound();
             activeBGM = null;
         }
 
-        function playBGM() { stopAllBGM(); activeBGM = bgmAudio; if (bgmAudio) { try { bgmAudio.currentTime = 0; bgmAudio.volume = 0.7; if (!soundMuted) bgmAudio.play().catch(e => {}); } catch (e) {} } }
+        // レベルに応じたステージBGMを取得
+        function getStageBGM() {
+            const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+            return (level >= 10 && spaceBgmAudio) ? spaceBgmAudio : bgmAudio;
+        }
+
+        function playBGM() { stopAllBGM(); const bgm = getStageBGM(); currentStageBgm = bgm; activeBGM = bgm; if (bgm) { try { bgm.currentTime = 0; bgm.volume = 0.7; if (!soundMuted) bgm.play().catch(e => {}); } catch (e) {} } }
         function playTitleBGM() { stopAllBGM(); activeBGM = titleBgmAudio; if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.volume = 0.7; if (!soundMuted) titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
         function playGameOverBGM() { stopAllBGM(); activeBGM = gameoverBgmAudio; if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; if (!soundMuted) gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
         function playGameOverBGMDelayed() {
             stopAllBGM();
-            activeBGM = gameoverBgmAudio;
-            if (!gameoverBgmAudio) return;
-            if (soundMuted) return;
-            try {
-                gameoverBgmAudio.currentTime = 0;
-                gameoverBgmAudio.volume = 0;
-                gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e));
-                setTimeout(() => {
-                    if (gameState === 'gameOver' && gameoverBgmAudio && !soundMuted) {
-                        gameoverBgmAudio.currentTime = 0;
-                        gameoverBgmAudio.volume = 0.7;
-                    }
-                }, 1300);
-            } catch (e) {}
+            // ゲームオーバーSE終了後にBGMを再生（1300ms後）
+            setTimeout(() => {
+                if (gameState === 'gameOver') {
+                    playGameOverBGM();
+                }
+            }, 1300);
         }
         function playHighScoreBGM() { stopAllBGM(); activeBGM = highScoreBgmAudio; if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.volume = 0.7; if (!soundMuted) highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
         function playFeverBGM() { stopAllBGM(); activeBGM = feverBgmAudio; if (feverBgmAudio) { try { feverBgmAudio.currentTime = 0; feverBgmAudio.volume = 0.7; if (!soundMuted) feverBgmAudio.play().catch(e => {}); } catch(e) {} } }
@@ -1604,6 +1643,7 @@
             if (soundMuted) {
                 // iOS: volume=0が効かないためpause()で確実に停止
                 if (activeBGM && !activeBGM.paused) activeBGM.pause();
+                stopFlashSound();
             } else {
                 // アンミュート: アクティブなBGMを再開
                 if (activeBGM) {
@@ -1927,9 +1967,14 @@
                 if (feverTimer <= 0) {
                     isFever = false;
                     feverTimer = 0;
-                    // 通常BGMに戻す
+                    // ステージBGMに戻す（途中から再開ではなく新規再生）
                     playBGM();
                 }
+            }
+
+            // レベル10到達時に宇宙BGMへ切り替え
+            if (currentStageBgm === bgmAudio && getStageBGM() === spaceBgmAudio && !isFever) {
+                playBGM();
             }
 
             if (isSettling) {
@@ -2011,6 +2056,7 @@
                         const allClearBonus = 3000;
                         score += allClearBonus;
                         addFloatingText(`ALL CLEAR +${allClearBonus}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
+                        playFlashSound();
                         triggerScreenShake(8, 25);
 
                         // 全粒子からエフェクト生成（間引いて軽量化）
@@ -2355,18 +2401,20 @@
             if (gameState === 'playing') {
                 gameState = 'paused';
                 pauseConfirmQuit = false;
-                stopAllBGM();
+                // BGMを一時停止（currentTimeはリセットしない）
+                if (activeBGM && !activeBGM.paused) activeBGM.pause();
                 if (audioCtx) audioCtx.suspend();
                 cancelAnimationFrame(gameLoop);
                 drawPauseScreen();
             }
         }
-        
+
         function resumeGame() {
             if (gameState === 'paused') {
                 gameState = 'playing';
                 if (audioCtx) audioCtx.resume();
-                playBGM();
+                // BGMを続きから再開（再生し直さない）
+                if (activeBGM && !soundMuted) activeBGM.play().catch(e => {});
                 update();
             }
         }
@@ -2499,10 +2547,12 @@
             pauseButtonElement = document.getElementById('pauseButton');
             resizeCanvas();
             loadBGM();
+            loadSpaceBGM();
             loadTitleBGM();
             loadGameOverBGM();
             loadHighScoreBGM();
             loadFeverBGM();
+            loadFlashSound();
             loadYogaImage();
             loadLogoImage();
 
@@ -2522,6 +2572,7 @@
             const allClearBonus = 3000;
             score += allClearBonus;
             addFloatingText('ALL CLEAR +' + allClearBonus, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
+            playFlashSound();
             triggerScreenShake(8, 25);
             for (let i = 0; i < sandParticles.length; i += 25) {
                 const p = sandParticles[i];
@@ -2548,6 +2599,7 @@
             totalLinesCleared = (lv - 1) * SPEED_INCREASE_INTERVAL;
             fallSpeed = 30 * Math.pow(SPEED_INCREASE_RATE, lv - 1);
             cachedDesertKey = '';
+            if (!isFever) playBGM();
             console.log('Level ' + lv + ' (lines=' + totalLinesCleared + ', speed=' + fallSpeed.toFixed(2) + ')');
         };
         window.triggerFever = function() {
