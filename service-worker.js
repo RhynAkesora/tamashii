@@ -1,12 +1,14 @@
-const CACHE_NAME = 'tamashii-no-kyoumei-v302';
+const CACHE_NAME = 'tamashii-no-kyoumei-v352';
 const urlsToCache = [
   './',
   './index.html',
   './yoga01.png',
+  './game-title.png',
+  './logo-white.png',
   './soul-stage.mp3',
-  './soul-gameover.mp3'
-  './fever-bgm.mp3'
-  './soul-space.mp3'
+  './soul-gameover.mp3',
+  './fever-bgm.mp3',
+  './soul-space.mp3',
   './flash.mp3'
 ];
 
