@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tamashii-tetris-v300';
+const CACHE_NAME = 'tamashii-no-kyoumei-v302';
 const urlsToCache = [
   './',
   './index.html',
@@ -6,6 +6,8 @@ const urlsToCache = [
   './soul-stage.mp3',
   './soul-gameover.mp3'
   './fever-bgm.mp3'
+  './soul-space.mp3'
+  './flash.mp3'
 ];
 
 // インストール時にキャッシュ
