@@ -432,6 +432,7 @@
             measurementId: "G-MZLS3H66X8"
         };
         
+        let audioUnlocked = false;
         function initAudio() {
             if (!audioCtx) {
                 try {
@@ -446,6 +447,17 @@
                 }
             } else if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
+            }
+            // iOS: 全Audio要素をユーザー操作コンテキスト内でアンロック
+            if (!audioUnlocked) {
+                audioUnlocked = true;
+                const allAudio = [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio];
+                allAudio.forEach(a => {
+                    if (a) {
+                        a.volume = 0;
+                        a.play().then(() => { a.pause(); a.currentTime = 0; a.volume = 0.7; }).catch(() => {});
+                    }
+                });
             }
         }
 
