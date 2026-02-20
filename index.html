@@ -12,7 +12,8 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-192.png">
-    
+    <link rel="manifest" href="manifest.json">
+
     <style>
         html, body { 
             margin: 0; 
@@ -4157,6 +4158,11 @@
             await initFirebase();
             await initAdMob(); // Firebaseの初期化を待つ
             
+            // PWA: ブラウザ環境の場合のみService Workerを登録
+            if ('serviceWorker' in navigator && typeof Capacitor === 'undefined') {
+                navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+            }
+
             gameState = 'pleaseTap';
             animatePleaseTapScreen();
         }
