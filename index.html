@@ -2360,7 +2360,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.52', W - 10, H - 10);
+            ctx.fillText('Ver. 3.54', W - 10, H - 10);
         }
 
         /**
@@ -2985,27 +2985,29 @@
         function getSettingsButtons() {
             const W = canvas.width, H = canvas.height;
             const btnWidth = Math.min(W * 0.5, 200);
-            const btnHeight = 45;
+            const btnHeight = Math.min(45, H * 0.06);
             const btnX = W / 2 - btnWidth / 2;
             // ウィンドウ領域
             const winY = H * 0.1, winH = H * 0.8;
             const winBottom = winY + winH;
-            // サウンド・言語はウィンドウ上部寄り
-            const startY = winY + 120;
-            const blockGap = btnHeight + 30;
+            // ボタン配置可能領域: タイトル(60px)の下〜クレジット(70px)の上
+            const contentTop = winY + 70;
+            const contentBottom = winBottom - 70;
+            const contentH = contentBottom - contentTop;
+            // 4段（サウンド、言語、遊び方、戻る）を等間隔配置
+            const gap = contentH / 4;
+            const soundY = contentTop + gap * 0.5 - btnHeight / 2;
+            const langY = contentTop + gap * 1.5 - btnHeight / 2;
+            const howToPlayY = contentTop + gap * 2.5 - btnHeight / 2;
+            const backY = contentTop + gap * 3.5 - btnHeight / 2;
             // 言語: 2つの横並びボタン
-            const langY = startY + blockGap;
             const langGap = 10;
             const langBtnW = (btnWidth - langGap) / 2;
-            const langJaX = btnX;
-            const langEnX = btnX + langBtnW + langGap;
-            // 戻るボタンはウィンドウ下部（クレジット・バージョンの上）
-            const backY = winBottom - btnHeight - 90;
             return {
-                sound:    { x: btnX, y: startY, w: btnWidth, h: btnHeight },
-                langJa:   { x: langJaX, y: langY, w: langBtnW, h: btnHeight },
-                langEn:   { x: langEnX, y: langY, w: langBtnW, h: btnHeight },
-                howToPlay:{ x: btnX, y: startY + blockGap * 2, w: btnWidth, h: btnHeight },
+                sound:    { x: btnX, y: soundY, w: btnWidth, h: btnHeight },
+                langJa:   { x: btnX, y: langY, w: langBtnW, h: btnHeight },
+                langEn:   { x: btnX + langBtnW + langGap, y: langY, w: langBtnW, h: btnHeight },
+                howToPlay:{ x: btnX, y: howToPlayY, w: btnWidth, h: btnHeight },
                 back:     { x: btnX, y: backY, w: btnWidth, h: btnHeight }
             };
         }
@@ -3086,7 +3088,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.52', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.54', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
