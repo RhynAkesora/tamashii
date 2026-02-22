@@ -45,10 +45,8 @@
             padding-bottom: env(safe-area-inset-bottom, 0px);
         }
         
-        canvas { 
-            border: 1px solid #000; 
-            max-width: 100%; 
-            max-height: calc(100% - 30px);
+        canvas {
+            border: none;
             display: block;
         }
         
@@ -2444,7 +2442,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.56', W - 10, H - 10);
+            ctx.fillText('Ver. 3.57', W - 10, H - 10);
         }
 
         /**
@@ -3327,7 +3325,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.56', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.57', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
