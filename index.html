@@ -283,6 +283,10 @@
         let shownTutorial = false;
         let howToPlayReturnTo = 'settings';
         let howToPlayShownAt = 0;
+        let welcomeStartTime = 0;
+        let welcomeAnimFrame = null;
+        let startScreenTime = 0;
+        let startScreenAnimFrame = null;
         const STRINGS = {
             ja: {
                 titleFallback: '魂の共鳴', subtitle: '～私を信じて～',
@@ -306,6 +310,8 @@
                 rule5: 'コンボでスコアアップ！',
                 rule6: '5コンボ以上で全消去ボーナス！',
                 rule7: '3コンボでフィーバー突入！',
+                welcomeMsg: 'はじめに設定と遊び方をご案内します',
+                welcomeTap: 'タップして進む',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -329,6 +335,8 @@
                 rule5: 'Chain combos for bonus points!',
                 rule6: '5+ combos triggers All Clear bonus!',
                 rule7: '3 combos activates Fever mode!',
+                welcomeMsg: 'First, let us set up and show you how to play',
+                welcomeTap: 'Tap to continue',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -455,7 +463,10 @@
                 allAudio.forEach(a => {
                     if (a) {
                         a.volume = 0;
-                        a.play().then(() => { a.pause(); a.currentTime = 0; a.volume = 0.7; }).catch(() => {});
+                        a.play().then(() => {
+                            if (a !== activeBGM) { a.pause(); a.currentTime = 0; }
+                            a.volume = 0.7;
+                        }).catch(() => {});
                     }
                 });
             }
@@ -736,7 +747,22 @@
 
             // プレイ中・ポーズ中はスコアバー+ポーズボタン分を確保、それ以外はcanvasをフル活用
             const showHUD = (gameState === 'playing' || gameState === 'paused');
+            const isGameScreen = showHUD || gameState === 'settings' || gameState === 'howToPlay';
             const hudHeight = showHUD ? (pauseButtonHeight + pauseButtonMargin + scoreDisplayHeight + scoreCanvasMargin) : 0;
+
+            // 非ゲーム画面（タイトル、PleaseTap等）では画面全体を使う
+            if (!isGameScreen) {
+                canvas.width = containerWidth;
+                canvas.height = containerHeight;
+                canvas.style.width = `${containerWidth}px`;
+                canvas.style.height = `${containerHeight}px`;
+                canvas.style.position = 'absolute';
+                canvas.style.left = '0px';
+                canvas.style.top = '0px';
+                cellSize = Math.floor(Math.min(containerWidth / (gridWidth + Math.ceil(gridWidth * 0.3)), containerHeight / gridHeight));
+                sandSize = cellSize / cellDivisions;
+                return;
+            }
 
             const bottomMargin = Math.max(0, safeBottom);
             const tempAvailableHeight = containerHeight - (topPageMargin + hudHeight + bottomMargin);
@@ -1263,6 +1289,15 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
             ctx.fillRect(px, py + s - 2, s, 2);  // 下辺
             ctx.fillRect(px + s - 2, py, 2, s);  // 右辺
+            // 宝石風ハイライト（中央上寄りに光沢）
+            const jewGrad = ctx.createRadialGradient(
+                px + s * 0.35, py + s * 0.3, 0,
+                px + s * 0.35, py + s * 0.3, s * 0.45
+            );
+            jewGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+            jewGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = jewGrad;
+            ctx.fillRect(px + 2, py + 2, s - 4, s - 4);
         }
 
         /**
@@ -1722,14 +1757,22 @@
         function mergePiece() {
             if (!currentPiece) return;
             playLandSound();
+            // 着地衝撃エフェクト用: ピースの最下行を記録
+            const pieceColor = colors[currentPiece.color];
+            let bottomY = 0;
+            const impactCells = [];
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
+                        const gy = currentPiece.y + y;
+                        const gx = currentPiece.x + x;
+                        if (gy > bottomY) bottomY = gy;
+                        impactCells.push({ gx, gy });
                         for (let i = 0; i < cellDivisions; i++) {
                             for (let j = 0; j < cellDivisions; j++) {
                                 sandParticles.push({
-                                    x: (currentPiece.x + x) * cellDivisions + i,
-                                    y: (currentPiece.y + y) * cellDivisions + j,
+                                    x: gx * cellDivisions + i,
+                                    y: gy * cellDivisions + j,
                                     color: currentPiece.color
                                 });
                             }
@@ -1737,6 +1780,26 @@
                     }
                 }
             }
+            // 着地衝撃パーティクル: 最下行のブロックから左右に火花を散らす
+            for (const cell of impactCells) {
+                if (cell.gy === bottomY) {
+                    const px = (cell.gx + 0.5) * cellSize;
+                    const py = (cell.gy + 1) * cellSize;
+                    for (let i = 0; i < 4; i++) {
+                        visualEffects.push({
+                            x: px,
+                            y: py,
+                            vx: (Math.random() - 0.5) * 6,
+                            vy: -Math.random() * 2 - 0.5,
+                            color: pieceColor,
+                            alpha: 1.0,
+                            size: Math.random() * 1.5 + 0.5,
+                            lifespan: 25
+                        });
+                    }
+                }
+            }
+            triggerScreenShake(2, 4);
             currentPiece = null;
             isSettling = true;
             comboCount = 0;
@@ -1860,6 +1923,16 @@
                 const pY = (key - pX) / SAND_GRID_WIDTH;
                 ctx.fillRect(pX * sandSize, pY * sandSize, sandSize, sandSize);
             }
+            // SFC風スキャンライン（横方向に走る光の帯）
+            const scanY = progress * canvas.height;
+            const scanH = 6;
+            ctx.globalAlpha = alpha * 0.7;
+            const scanGrad = ctx.createLinearGradient(0, scanY - scanH, 0, scanY + scanH);
+            scanGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            scanGrad.addColorStop(0.5, 'rgba(255, 255, 255, 1)');
+            scanGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = scanGrad;
+            ctx.fillRect(0, scanY - scanH, canvas.width, scanH * 2);
             ctx.globalAlpha = 1.0;
         }
 
@@ -1868,25 +1941,36 @@
          */
         function finishFlash() {
             if (!flashKeys) return;
-            createEffectForComponent(flashKeys);
+            // 消去される砂の色マップを構築
+            const colorMap = new Map();
+            for (const p of sandParticles) {
+                const key = p.y * SAND_GRID_WIDTH + p.x;
+                if (flashKeys.has(key)) {
+                    colorMap.set(key, p.color);
+                }
+            }
+            createEffectForComponent(flashKeys, colorMap);
             sandParticles = sandParticles.filter(p => !flashKeys.has(p.y * SAND_GRID_WIDTH + p.x));
             cellOccupied = null;
             flashKeys = null;
             isFlashing = false;
         }
 
-        function createEffectForComponent(component) {
+        function createEffectForComponent(component, colorMap) {
             for (const key of component) {
                 if (Math.random() < 0.1) {
                     const pX = key % SAND_GRID_WIDTH;
                     const pY = (key - pX) / SAND_GRID_WIDTH;
+                    // 砂の色を取得してカラフルなパーティクルを生成
+                    const colorIdx = colorMap ? colorMap.get(key) : undefined;
+                    const particleColor = (colorIdx !== undefined) ? colors[colorIdx] : '#FFFFFF';
                     for (let i = 0; i < 3; i++) {
                         visualEffects.push({
                             x: pX * sandSize,
                             y: pY * sandSize,
                             vx: (Math.random() - 0.5) * 4,
                             vy: (Math.random() - 0.5) * 4,
-                            color: '#FFFFFF',
+                            color: particleColor,
                             alpha: 1.0,
                             size: Math.random() * 2 + 1,
                             lifespan: 60
@@ -2360,7 +2444,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.54', W - 10, H - 10);
+            ctx.fillText('Ver. 3.56', W - 10, H - 10);
         }
 
         /**
@@ -2612,13 +2696,18 @@
         /**
          * ハイスコアボタンを描画する
          */
-        function drawHighScoreButton() {
+        function getHighScoreButtonRect() {
             const isSmallScreen = canvas.height < 600;
-            const buttonWidth = Math.min(canvas.width * 0.35, 180);
-            const buttonHeight = isSmallScreen ? 38 : 44;
+            const buttonWidth = Math.min(canvas.width * 0.35, 280);
+            const buttonHeight = Math.min(isSmallScreen ? 38 : 44, canvas.height * 0.06);
             const buttonX = canvas.width / 2 - buttonWidth / 2;
             const buttonY = canvas.height * (isSmallScreen ? 0.76 : 0.78);
-            drawSFCButton(buttonX, buttonY, buttonWidth, buttonHeight, t('highScoreBtn'), 'blue', isSmallScreen ? 16 : 18);
+            return { x: buttonX, y: buttonY, w: buttonWidth, h: Math.max(buttonHeight, 38) };
+        }
+        function drawHighScoreButton() {
+            const r = getHighScoreButtonRect();
+            const isSmallScreen = canvas.height < 600;
+            drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'blue', isSmallScreen ? 16 : 18);
         }
 
         /**
@@ -2901,12 +2990,8 @@
          * ハイスコアボタンがタップされたかチェックする
          */
         function isHighScoreButtonTapped(x, y) {
-            const isSmallScreen = canvas.height < 600;
-            const buttonWidth = Math.min(canvas.width * 0.35, 180);
-            const buttonHeight = isSmallScreen ? 38 : 44;
-            const buttonX = canvas.width / 2 - buttonWidth / 2;
-            const buttonY = canvas.height * (isSmallScreen ? 0.76 : 0.78);
-            return x >= buttonX && x <= buttonX + buttonWidth && y >= buttonY && y <= buttonY + buttonHeight;
+            const r = getHighScoreButtonRect();
+            return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
         }
 
         /**
@@ -3013,6 +3098,160 @@
         }
 
         /**
+         * 初回起動ウェルカム画面を描画する
+         */
+        function drawWelcomeScreen() {
+            const W = canvas.width, H = canvas.height;
+            const elapsed = Date.now() - welcomeStartTime;
+
+            // 背景（タイトルと同系色のグラデーション）
+            const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+            bgGrad.addColorStop(0, '#0a0a1e');
+            bgGrad.addColorStop(1, '#1a1a3e');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, W, H);
+
+            // 装飾: 星のきらめき
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < 30; i++) {
+                const sx = ((i * 7919 + 31) % 100) / 100 * W;
+                const sy = ((i * 6271 + 17) % 100) / 100 * H;
+                const twinkle = Math.sin(elapsed * 0.003 + i * 1.7) * 0.3 + 0.7;
+                ctx.globalAlpha = twinkle * 0.5;
+                ctx.fillRect(sx, sy, 1.5, 1.5);
+            }
+            ctx.globalAlpha = 1.0;
+
+            // メッセージ（フェードイン: 0〜800ms）
+            const msgAlpha = Math.min(1, elapsed / 800);
+            ctx.globalAlpha = msgAlpha;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const fontSize = Math.min(22, W * 0.05);
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.fillStyle = '#e0d0ff';
+            ctx.shadowColor = '#8060c0';
+            ctx.shadowBlur = 10;
+            ctx.fillText(STRINGS['ja']['welcomeMsg'], W / 2, H * 0.40);
+            ctx.shadowBlur = 0;
+
+            // 英語テキスト（小さく）
+            const enSize = Math.min(14, W * 0.033);
+            ctx.font = `${enSize}px sans-serif`;
+            ctx.fillStyle = '#9090b0';
+            ctx.fillText(STRINGS['en']['welcomeMsg'], W / 2, H * 0.46);
+
+            // 「タップして進む」（1.2秒後にフェードイン + 点滅）
+            if (elapsed > 1200) {
+                const tapAlpha = Math.min(1, (elapsed - 1200) / 600);
+                const blink = Math.sin(elapsed * 0.004) * 0.2 + 0.8;
+                ctx.globalAlpha = tapAlpha * blink;
+                const tapSize = Math.min(16, W * 0.038);
+                ctx.font = `${tapSize}px sans-serif`;
+                ctx.fillStyle = '#a0a0c0';
+                ctx.fillText(STRINGS['ja']['welcomeTap'], W / 2, H * 0.54);
+                const tapEnSize = Math.min(12, W * 0.028);
+                ctx.font = `${tapEnSize}px sans-serif`;
+                ctx.fillStyle = '#707090';
+                ctx.fillText(STRINGS['en']['welcomeTap'], W / 2, H * 0.58);
+            }
+
+            ctx.globalAlpha = 1.0;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+            welcomeAnimFrame = requestAnimationFrame(drawWelcomeScreen);
+        }
+
+        /**
+         * START演出画面を描画する
+         */
+        function drawStartScreen() {
+            const W = canvas.width, H = canvas.height;
+            const elapsed = Date.now() - startScreenTime;
+            const duration = 2000;
+
+            // 背景
+            const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+            bgGrad.addColorStop(0, '#0a0a1e');
+            bgGrad.addColorStop(1, '#1a1a3e');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, W, H);
+
+            // 装飾: 星
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < 30; i++) {
+                const sx = ((i * 7919 + 31) % 100) / 100 * W;
+                const sy = ((i * 6271 + 17) % 100) / 100 * H;
+                const twinkle = Math.sin(elapsed * 0.003 + i * 1.7) * 0.3 + 0.7;
+                ctx.globalAlpha = twinkle * 0.5;
+                ctx.fillRect(sx, sy, 1.5, 1.5);
+            }
+            ctx.globalAlpha = 1.0;
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // START文字（拡大しながらフェードイン → フェードアウト）
+            const progress = elapsed / duration;
+            let alpha, scale;
+            if (progress < 0.3) {
+                // フェードイン + スケールアップ
+                const t = progress / 0.3;
+                alpha = t;
+                scale = 0.5 + t * 0.5;
+            } else if (progress < 0.7) {
+                // 維持
+                alpha = 1;
+                scale = 1.0;
+            } else if (progress < 1.0) {
+                // フェードアウト
+                const t = (progress - 0.7) / 0.3;
+                alpha = 1 - t;
+                scale = 1.0 + t * 0.3;
+            } else {
+                alpha = 0;
+                scale = 1.3;
+            }
+
+            if (alpha > 0) {
+                ctx.globalAlpha = alpha;
+                ctx.save();
+                ctx.translate(W / 2, H * 0.45);
+                ctx.scale(scale, scale);
+                const startSize = Math.min(48, W * 0.12);
+                ctx.font = `bold ${startSize}px sans-serif`;
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowColor = '#4080ff';
+                ctx.shadowBlur = 20;
+                ctx.fillText('START', 0, 0);
+                ctx.shadowBlur = 0;
+                ctx.restore();
+                ctx.globalAlpha = 1.0;
+            }
+
+            // 時間経過でゲーム開始
+            if (elapsed >= duration) {
+                if (startScreenAnimFrame) {
+                    cancelAnimationFrame(startScreenAnimFrame);
+                    startScreenAnimFrame = null;
+                }
+                gameState = 'playing';
+                scoreDisplayElement.style.display = 'flex';
+                if (pauseButtonElement) pauseButtonElement.style.display = 'block';
+                resizeCanvas();
+                updateScoreDisplay();
+                update();
+                return;
+            }
+
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+            startScreenAnimFrame = requestAnimationFrame(drawStartScreen);
+        }
+
+        /**
          * セッティング画面を描画する
          */
         function drawSettingsScreen() {
@@ -3088,7 +3327,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.54', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.56', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -3212,15 +3451,21 @@
             const ruleLeftX = winX + winW * 0.12;
 
             ctx.textAlign = 'left';
+            const ruleMaxW = winW * 0.76 - ruleFontSize * 1.2;
             for (let i = 0; i < rules.length; i++) {
                 const ry = ruleStartY + i * ruleLineH;
                 // 装飾記号（◆）
                 ctx.fillStyle = '#c0a040';
                 ctx.font = `${ruleFontSize * 0.7}px Arial`;
                 ctx.fillText('◆', ruleLeftX, ry);
-                // テキスト
+                // テキスト（ウィンドウ幅に合わせてフォントサイズ縮小）
                 ctx.fillStyle = '#eee8d0';
-                ctx.font = `bold ${ruleFontSize}px Arial`;
+                let fs = ruleFontSize;
+                ctx.font = `bold ${fs}px Arial`;
+                while (ctx.measureText(rules[i]).width > ruleMaxW && fs > 9) {
+                    fs -= 0.5;
+                    ctx.font = `bold ${fs}px Arial`;
+                }
                 ctx.fillText(rules[i], ruleLeftX + ruleFontSize * 1.2, ry);
             }
 
@@ -3248,11 +3493,9 @@
                             y >= backBtn.y && y <= backBtn.y + backBtn.h;
             if (hitBack) {
                 if (howToPlayReturnTo === 'playing') {
-                    gameState = 'playing';
-                    scoreDisplayElement.style.display = 'flex';
-                    if (pauseButtonElement) pauseButtonElement.style.display = 'block';
-                    resizeCanvas();
-                    update();
+                    gameState = 'startScreen';
+                    startScreenTime = Date.now();
+                    drawStartScreen();
                 } else {
                     gameState = 'settings';
                     drawSettingsScreen();
@@ -3407,11 +3650,13 @@
 
             playBGM();
 
-            // 初回起動時: 設定画面（言語選択）→遊び方画面→ゲーム開始
+            // 初回起動時: ウェルカム→設定画面（言語選択）→遊び方画面→ゲーム開始
             if (!shownTutorial) {
-                settingsReturnTo = 'playing';
-                gameState = 'settings';
-                drawSettingsScreen();
+                gameState = 'welcome';
+                welcomeStartTime = Date.now();
+                scoreDisplayElement.style.display = 'none';
+                if (pauseButtonElement) pauseButtonElement.style.display = 'none';
+                drawWelcomeScreen();
                 return;
             }
 
@@ -3747,15 +3992,29 @@
                     playTitleBGM();
                     drawTitleScreen();
                     break;
+                case 'welcome':
+                    // 1.2秒経過後のタップで設定画面へ進む
+                    if (Date.now() - welcomeStartTime > 1200) {
+                        if (welcomeAnimFrame) {
+                            cancelAnimationFrame(welcomeAnimFrame);
+                            welcomeAnimFrame = null;
+                        }
+                        settingsReturnTo = 'playing';
+                        gameState = 'settings';
+                        drawSettingsScreen();
+                    }
+                    break;
                 case 'title':
                     if (isGearButtonTapped(x, y)) {
                         settingsReturnTo = 'title';
                         gameState = 'settings';
                         drawSettingsScreen();
                     } else if (isHighScoreButtonTapped(x, y)) {
+                        playHighScoreBGM();
                         gameState = 'highscore';
                         hsScrollY = 0;
                         hsScrollVelocity = 0;
+                        resizeCanvas();
                         drawHighScoreScreen(true);
                         await fetchHighScores();
                         if (gameState === 'highscore') drawHighScoreScreen(false);
@@ -3767,7 +4026,9 @@
                     const bb = getHsBackBtnRect();
                     if (x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) {
                         if (hsAnimFrame) { cancelAnimationFrame(hsAnimFrame); hsAnimFrame = null; }
+                        playTitleBGM();
                         gameState = 'title';
+                        resizeCanvas();
                         drawTitleScreen();
                     }
                     break;
@@ -4135,6 +4396,8 @@
                 switch (gameState) {
                     case 'pleaseTap': drawPleaseTapScreen(); break;
                     case 'title': drawTitleScreen(); break;
+                    case 'welcome': break; // requestAnimationFrame で自走
+                    case 'startScreen': break; // requestAnimationFrame で自走
                     case 'highscore': drawHighScoreScreen(); break;
                     case 'gameOver': drawGameOverScreen(); break;
                     case 'playing':
@@ -4180,6 +4443,13 @@
             gameState = 'pleaseTap';
             animatePleaseTapScreen();
         }
+
+        // コンソール用デバッグコマンド
+        window.resetTutorial = function() {
+            localStorage.removeItem('tamashii_shown_tutorial');
+            shownTutorial = false;
+            console.log('初回起動フラグをリセットしました。リロードしてください。');
+        };
 
         // ゲーム開始
         init();
