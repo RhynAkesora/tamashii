@@ -168,6 +168,7 @@
             <p>ハイスコア！名前を入力してください:</p>
             <input type="text" id="playerNameInput" maxlength="10" placeholder="なまえ">
             <button id="submitScoreButton">登録</button>
+            <button id="skipScoreButton" style="background-color:#666;margin-left:8px;">スキップ</button>
         </div>
     </div>
 
@@ -192,6 +193,7 @@
         const nameInputModal = document.getElementById('nameInputModal');
         const playerNameInput = document.getElementById('playerNameInput');
         const submitScoreButton = document.getElementById('submitScoreButton');
+        const skipScoreButton = document.getElementById('skipScoreButton');
         let pauseButtonElement;
 
         // ゲーム設定
@@ -271,6 +273,7 @@
 
         // ゲームオーバー画面のタップ受付フラグ
         let gameOverReady = false;
+        let rankPosition = 0; // ランクイン順位（0=ランク外）
 
         // サウンドミュート
         let soundMuted = false;
@@ -294,7 +297,8 @@
                 confirmQuit: 'タイトル画面に戻りますか？', yes: 'はい', no: 'いいえ',
                 gameOver: 'ゲームオーバー', linesCleared: '消去ライン数',
                 maxCombo: '最高コンボ', levelReached: '到達レベル', playTime: 'プレイ時間',
-                loading: '読み込み中...', noScores: 'まだスコアがありません', anonymous: 'ななし',
+                loading: '読み込み中...', noScores: 'まだスコアがありません', anonymous: '名無しの魂', skip: 'スキップ',
+                rankIn: '位にランクイン！',
                 hudScore: 'スコア', hudMaxCombo: '最高コンボ', hudSpeed: '速度',
                 namePrompt: 'ハイスコア！名前を入力してください:', namePlaceholder: 'なまえ', nameSubmit: '登録',
                 settingsTitle: '設定', sound: 'サウンド', language: '言語', back: '戻る',
@@ -319,7 +323,8 @@
                 confirmQuit: 'Return to title screen?', yes: 'Yes', no: 'No',
                 gameOver: 'Game Over', linesCleared: 'Lines Cleared',
                 maxCombo: 'Max Combo', levelReached: 'Level Reached', playTime: 'Play Time',
-                loading: 'Loading...', noScores: 'No scores yet', anonymous: 'Anonymous',
+                loading: 'Loading...', noScores: 'No scores yet', anonymous: 'Nameless Soul', skip: 'Skip',
+                rankIn: ' Ranked!',
                 hudScore: 'Score', hudMaxCombo: 'Max Combo', hudSpeed: 'Speed',
                 namePrompt: 'High Score! Enter your name:', namePlaceholder: 'Name', nameSubmit: 'Submit',
                 settingsTitle: 'Settings', sound: 'Sound', language: 'Language', back: 'Back',
@@ -454,20 +459,18 @@
             } else if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
-            // iOS: 全Audio要素をユーザー操作コンテキスト内でアンロック
-            if (!audioUnlocked) {
-                audioUnlocked = true;
-                const allAudio = [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio];
-                allAudio.forEach(a => {
-                    if (a) {
-                        a.volume = 0;
-                        a.play().then(() => {
-                            if (a !== activeBGM) { a.pause(); a.currentTime = 0; }
-                            a.volume = 0.7;
-                        }).catch(() => {});
-                    }
-                });
-            }
+            // iOS/Android: 全Audio要素をユーザー操作コンテキスト内でアンロック
+            // 毎回のタッチで未再生のAudioをアンロックし直す
+            const allAudio = [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio];
+            allAudio.forEach(a => {
+                if (a && a.paused && a !== activeBGM) {
+                    a.volume = 0;
+                    a.play().then(() => {
+                        if (a !== activeBGM) { a.pause(); a.currentTime = 0; }
+                        a.volume = 0.7;
+                    }).catch(() => {});
+                }
+            });
         }
 
         // 効果音生成ロジック
@@ -2072,6 +2075,7 @@
         async function gameOver() {
             gameState = 'gameOver';
             gameOverReady = false;
+            rankPosition = 0;
             playTimeSeconds = Math.floor((Date.now() - gameStartTime) / 1000);
             scoreDisplayElement.style.display = 'none';
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
@@ -2220,7 +2224,7 @@
                 const imgW = logoImage.width * scale;
                 const imgH = logoImage.height * scale;
                 const imgX = (W - imgW) / 2;
-                const imgY = H - imgH - (isSmallScreen ? 15 : 25);
+                const imgY = H - imgH - Math.max(35, H * 0.05);
 
                 ctx.globalAlpha = 0.7;
                 ctx.drawImage(logoImage, imgX, imgY, imgW, imgH);
@@ -2230,7 +2234,7 @@
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                 ctx.font = `${creditFontSize}px Arial`;
                 ctx.textAlign = 'center';
-                const creditY = H - (isSmallScreen ? 20 : 30);
+                const creditY = H - Math.max(35, H * 0.05);
                 ctx.fillText('Presented by NullPo Works', cx, creditY);
             }
         }
@@ -2442,7 +2446,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.57', W - 10, H - 10);
+            ctx.fillText('Ver. 3.58', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3077,12 +3081,14 @@
             const contentTop = winY + 70;
             const contentBottom = winBottom - 70;
             const contentH = contentBottom - contentTop;
-            // 4段（サウンド、言語、遊び方、戻る）を等間隔配置
-            const gap = contentH / 4;
+            // 初回設定では遊び方ボタンを非表示（3段）、通常は4段
+            const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
+            const slots = isFirstSetup ? 3 : 4;
+            const gap = contentH / slots;
             const soundY = contentTop + gap * 0.5 - btnHeight / 2;
             const langY = contentTop + gap * 1.5 - btnHeight / 2;
-            const howToPlayY = contentTop + gap * 2.5 - btnHeight / 2;
-            const backY = contentTop + gap * 3.5 - btnHeight / 2;
+            const howToPlayY = isFirstSetup ? -999 : contentTop + gap * 2.5 - btnHeight / 2;
+            const backY = contentTop + gap * (slots - 0.5) - btnHeight / 2;
             // 言語: 2つの横並びボタン
             const langGap = 10;
             const langBtnW = (btnWidth - langGap) / 2;
@@ -3309,9 +3315,11 @@
             drawSFCButton(btns.langEn.x, btns.langEn.y, btns.langEn.w, btns.langEn.h,
                 'English', currentLang === 'en' ? 'green' : 'gray');
 
-            // 遊び方ボタン
-            drawSFCButton(btns.howToPlay.x, btns.howToPlay.y, btns.howToPlay.w, btns.howToPlay.h,
-                t('howToPlay'), 'blue');
+            // 遊び方ボタン（初回設定では非表示）
+            if (btns.howToPlay.y >= 0) {
+                drawSFCButton(btns.howToPlay.x, btns.howToPlay.y, btns.howToPlay.w, btns.howToPlay.h,
+                    t('howToPlay'), 'blue');
+            }
 
             // 戻る/進むボタン
             if (settingsReturnTo === 'playing' && !shownTutorial) {
@@ -3325,7 +3333,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.57', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.58', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -3514,6 +3522,8 @@
                     if (input) input.placeholder = t('namePlaceholder');
                     const btn = document.getElementById('submitScoreButton');
                     if (btn) btn.textContent = t('nameSubmit');
+                    const skipBtn = document.getElementById('skipScoreButton');
+                    if (skipBtn) skipBtn.textContent = t('skip');
                 }
                 document.title = currentLang === 'ja' ? '魂の共鳴 ～私を信じて～' : 'Soul Resonance ~Believe in Me~';
                 document.documentElement.lang = currentLang;
@@ -3569,8 +3579,21 @@
             ctx.font = '14px Arial';
             ctx.fillText(t('scoreLabel'), cx, baseY + 75);
 
+            // ランクイン表示
+            if (rankPosition > 0) {
+                ctx.fillStyle = '#ff88ff';
+                ctx.font = 'bold 18px Arial';
+                ctx.shadowColor = 'rgba(255, 100, 255, 0.5)';
+                ctx.shadowBlur = 6;
+                const rankText = currentLang === 'ja'
+                    ? `${rankPosition}${t('rankIn')}`
+                    : `#${rankPosition}${t('rankIn')}`;
+                ctx.fillText(rankText, cx, baseY + 95);
+                ctx.shadowBlur = 0;
+            }
+
             // 統計情報
-            const statY = baseY + 110;
+            const statY = baseY + (rankPosition > 0 ? 125 : 110);
             const lineH = 32;
             const finalLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
             const minutes = Math.floor(playTimeSeconds / 60);
@@ -4226,13 +4249,18 @@
                 togglePause();
             });
 
-            submitScoreButton.addEventListener('click', async () => {
-                if (submitScoreButton.disabled) return;
-                submitScoreButton.disabled = true;
-                const playerName = (playerNameInput.value.trim() || t('anonymous')).slice(0, 10);
+            async function submitScore(playerName) {
                 await saveHighScore(playerName, score, maxCombo);
+                await fetchHighScores();
+                // ランクイン順位を計算
+                rankPosition = 0;
+                for (let i = 0; i < highScores.length; i++) {
+                    if (highScores[i].score <= score) {
+                        rankPosition = i + 1;
+                        break;
+                    }
+                }
                 nameInputModal.style.display = 'none';
-                submitScoreButton.disabled = false;
                 stopAllBGM();
                 playGameOverBGM();
                 gameOverReady = false;
@@ -4241,6 +4269,21 @@
                     gameOverReady = true;
                     if (gameState === 'gameOver') drawGameOverScreen();
                 }, 1000);
+            }
+
+            submitScoreButton.addEventListener('click', async () => {
+                if (submitScoreButton.disabled) return;
+                submitScoreButton.disabled = true;
+                const playerName = (playerNameInput.value.trim() || t('anonymous')).slice(0, 10);
+                await submitScore(playerName);
+                submitScoreButton.disabled = false;
+            });
+
+            skipScoreButton.addEventListener('click', async () => {
+                if (skipScoreButton.disabled) return;
+                skipScoreButton.disabled = true;
+                await submitScore(t('anonymous'));
+                skipScoreButton.disabled = false;
             });
 
             canvas.addEventListener('touchstart', (e) => {
