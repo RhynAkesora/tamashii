@@ -459,18 +459,20 @@
             } else if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
-            // iOS/Android: 全Audio要素をユーザー操作コンテキスト内でアンロック
-            // 毎回のタッチで未再生のAudioをアンロックし直す
-            const allAudio = [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio];
-            allAudio.forEach(a => {
-                if (a && a.paused && a !== activeBGM) {
-                    a.volume = 0;
-                    a.play().then(() => {
-                        if (a !== activeBGM) { a.pause(); a.currentTime = 0; }
-                        a.volume = 0.7;
-                    }).catch(() => {});
-                }
-            });
+            // iOS/Android: 全Audio要素をユーザー操作コンテキスト内でアンロック（初回のみ）
+            if (!audioUnlocked) {
+                audioUnlocked = true;
+                const allAudio = [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio];
+                allAudio.forEach(a => {
+                    if (a) {
+                        a.volume = 0;
+                        a.play().then(() => {
+                            if (a !== activeBGM) { a.pause(); a.currentTime = 0; }
+                            a.volume = 0.7;
+                        }).catch(() => {});
+                    }
+                });
+            }
         }
 
         // 効果音生成ロジック
@@ -2446,7 +2448,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.58', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.61', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -2547,7 +2549,7 @@
 
         function playBGM() { stopAllBGM(); const bgm = getStageBGM(); currentStageBgm = bgm; activeBGM = bgm; if (bgm) { try { bgm.currentTime = 0; bgm.volume = 0.7; if (!soundMuted) bgm.play().catch(e => {}); } catch (e) {} } }
         function playTitleBGM() { stopAllBGM(); activeBGM = titleBgmAudio; if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.volume = 0.7; if (!soundMuted) titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playGameOverBGM() { stopAllBGM(); activeBGM = gameoverBgmAudio; if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; if (!soundMuted) gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
+        function playGameOverBGM() { stopAllBGM(); if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); activeBGM = gameoverBgmAudio; if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; if (!soundMuted) gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
         function playGameOverBGMDelayed() {
             stopAllBGM();
             // ゲームオーバーSE終了後にBGMを再生（1300ms後）
@@ -2781,7 +2783,8 @@
             const backBtnH = Math.floor(36 * scale);
             const backBtnW = Math.floor(120 * scale);
             const backBtnX = (W - backBtnW) / 2;
-            const backBtnY = H - backBtnH - Math.floor(12 * scale);
+            const safeBottom = 40;
+            const backBtnY = H - backBtnH - safeBottom;
 
             ctx.fillStyle = 'rgba(80, 80, 120, 0.8)';
             ctx.strokeStyle = '#8888cc';
@@ -2957,7 +2960,8 @@
             const backBtnH = Math.floor(36 * scale);
             const backBtnW = Math.floor(120 * scale);
             const backBtnX = (W - backBtnW) / 2;
-            const backBtnY = H - backBtnH - Math.floor(12 * scale);
+            const safeBottom = 40;
+            const backBtnY = H - backBtnH - safeBottom;
             return { x: backBtnX, y: backBtnY, w: backBtnW, h: backBtnH };
         }
 
@@ -3333,7 +3337,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.58', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.61', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -3752,21 +3756,19 @@
                     addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? '#ff00ff' : '#ffd700');
 
                     // フィーバー発動・延長
-                    if (comboCount >= FEVER_COMBO_THRESHOLD) {
-                        if (!isFever) {
-                            // 新規発動: ベース20秒
-                            isFever = true;
-                            feverTimer = FEVER_DURATION;
-                            playFeverBGM();
-                            addFloatingText('FEVER!', floatX, floatY - 50, '#ff00ff');
-                            triggerScreenShake(5, 20);
-                        } else {
-                            // 延長: ライン消去数 × 2秒
-                            const ext = clearedLines * FEVER_LINE_BONUS;
-                            feverTimer = Math.min(feverTimer + ext, FEVER_MAX);
-                            const addSec = Math.round(ext / 60);
-                            addFloatingText(`FEVER +${addSec}s`, floatX, floatY - 50, '#ff00ff');
-                        }
+                    if (comboCount >= FEVER_COMBO_THRESHOLD && !isFever) {
+                        // 新規発動: ベース20秒
+                        isFever = true;
+                        feverTimer = FEVER_DURATION;
+                        playFeverBGM();
+                        addFloatingText('FEVER!', floatX, floatY - 50, '#ff00ff');
+                        triggerScreenShake(5, 20);
+                    } else if (isFever) {
+                        // フィーバー中は全てのライン消去でタイマー延長（コンボ数不問）
+                        const ext = clearedLines * FEVER_LINE_BONUS;
+                        feverTimer = Math.min(feverTimer + ext, FEVER_MAX);
+                        const addSec = Math.round(ext / 60);
+                        addFloatingText(`FEVER +${addSec}s`, floatX, floatY - 50, '#ff00ff');
                     }
 
                     // ヨガ行者エフェクト更新
@@ -3926,13 +3928,13 @@
                 const barWidth = gameAreaWidth * (feverTimer / FEVER_MAX);
                 ctx.fillStyle = `rgba(255, 0, 255, ${0.5 + pulse * 0.3})`;
                 ctx.fillRect(0, 0, barWidth, 4);
-                // FEVER カウントダウン テキスト
+                // FEVER カウントダウン テキスト（ブロックエリア最上部）
                 const feverSec = Math.ceil(feverTimer / 60);
                 ctx.globalAlpha = 0.3 + Math.sin(frameCount * 0.1) * 0.15;
                 ctx.fillStyle = '#ff00ff';
                 ctx.font = `bold ${Math.max(20, cellSize * 1.2)}px Arial`;
                 ctx.textAlign = 'center';
-                ctx.fillText(`FEVER ${feverSec}s`, gameAreaWidth / 2, canvas.height - 15);
+                ctx.fillText(`FEVER ${feverSec}s`, gameAreaWidth / 2, cellSize * 1.2);
                 ctx.globalAlpha = 1.0;
             }
 
