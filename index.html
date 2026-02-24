@@ -323,6 +323,8 @@
         // ゲームオーバー画面のタップ受付フラグ
         let gameOverReady = false;
         let rankPosition = 0; // ランクイン順位（0=ランク外）
+        let personalBest = JSON.parse(localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
+        let isNewPersonalBest = false; // 今回のゲームで自己ベスト更新したか
 
         // サウンドミュート
         let soundMuted = false;
@@ -366,6 +368,8 @@
                 privacyPolicy: 'プライバシーポリシー',
                 termsOfService: '利用規約',
                 contact: 'お問い合わせ',
+                personalBest: '自己ベスト',
+                newPersonalBest: '自己ベスト更新！',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -395,6 +399,8 @@
                 privacyPolicy: 'Privacy Policy',
                 termsOfService: 'Terms of Service',
                 contact: 'Contact',
+                personalBest: 'Best',
+                newPersonalBest: 'New Personal Best!',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -2144,7 +2150,7 @@
         let prevScoreText = '';
         function updateScoreDisplay() {
             const text = `<span>${t('hudScore')}: ${score}</span>` +
-                `<span>${t('hudMaxCombo')}: ${maxCombo}x</span>` +
+                `<span>${t('personalBest')}: ${personalBest.score.toLocaleString()}</span>` +
                 `<span>${t('hudSpeed')}: ${(30 / fallSpeed).toFixed(2)}x</span>`;
             if (text !== prevScoreText) {
                 prevScoreText = text;
@@ -2161,6 +2167,13 @@
             rankPosition = 0;
             playTimeSeconds = Math.floor((Date.now() - gameStartTime) / 1000);
             scoreDisplayElement.style.display = 'none';
+
+            // 自己ベスト判定・保存
+            isNewPersonalBest = score > personalBest.score;
+            if (isNewPersonalBest) {
+                personalBest = { score, maxCombo, date: new Date().toISOString() };
+                try { localStorage.setItem('personalBest', JSON.stringify(personalBest)); } catch(e) {}
+            }
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             resizeCanvas();
             cancelAnimationFrame(gameLoop);
@@ -2889,8 +2902,22 @@
             ctx.fillStyle = '#ccccee';
             ctx.fillText(t('hsBack'), W / 2, backBtnY + backBtnH / 2 + backFontSize * 0.35);
 
+            // --- 自己ベスト表示 ---
+            const pbAreaH = personalBest.score > 0 ? Math.floor(28 * scale) : 0;
+            if (personalBest.score > 0) {
+                const pbY = titleY + titleH + Math.floor(6 * scale);
+                const pbFontSize = Math.floor(13 * scale);
+                ctx.font = `bold ${pbFontSize}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#ffcc44';
+                ctx.shadowColor = 'rgba(255, 200, 50, 0.4)';
+                ctx.shadowBlur = 4 * scale;
+                ctx.fillText(`${t('personalBest')}: ${personalBest.score.toLocaleString()}`, W / 2, pbY + pbFontSize);
+                ctx.shadowBlur = 0;
+            }
+
             // --- リストエリア ---
-            const listTop = titleY + titleH + Math.floor(8 * scale);
+            const listTop = titleY + titleH + pbAreaH + Math.floor(8 * scale);
             const listBottom = backBtnY - Math.floor(10 * scale);
             const listH = listBottom - listTop;
             const listMarginX = Math.floor(8 * scale);
@@ -3719,8 +3746,22 @@
                 ctx.shadowBlur = 0;
             }
 
+            // 自己ベスト更新表示
+            let personalBestOffset = 0;
+            if (isNewPersonalBest) {
+                const pbY = baseY + (rankPosition > 0 ? 115 : 100);
+                ctx.fillStyle = '#ffdd44';
+                ctx.font = 'bold 20px Arial';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(255, 220, 50, 0.7)';
+                ctx.shadowBlur = 10;
+                ctx.fillText(t('newPersonalBest'), cx, pbY);
+                ctx.shadowBlur = 0;
+                personalBestOffset = 25;
+            }
+
             // 統計情報
-            const statY = baseY + (rankPosition > 0 ? 125 : 110);
+            const statY = baseY + (rankPosition > 0 ? 125 : 110) + personalBestOffset;
             const lineH = 32;
             const finalLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
             const minutes = Math.floor(playTimeSeconds / 60);
@@ -3767,6 +3808,7 @@
             score = 0;
             comboCount = 0;
             maxCombo = 0;
+            isNewPersonalBest = false;
             totalLinesCleared = 0;
             isSettling = false;
             isClearing = false;
