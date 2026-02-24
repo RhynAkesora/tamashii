@@ -458,9 +458,13 @@
 
         // ★本番リリース時: IS_PRODUCTION を true に変更する
         const IS_PRODUCTION = true;
-        const ADMOB_INTERSTITIAL_ID = IS_PRODUCTION
-            ? 'ca-app-pub-4148293353679224/9166455565'   // 本番ID
-            : 'ca-app-pub-3940256099942544/1033173712';  // テスト用ID
+        // プラットフォーム別AdMob広告ユニットID
+        const ADMOB_IDS = {
+            ios:     IS_PRODUCTION ? 'ca-app-pub-4148293353679224/9166455565' : 'ca-app-pub-3940256099942544/1033173712',
+            android: IS_PRODUCTION ? 'ca-app-pub-4148293353679224/ANDROID_AD_UNIT_ID' : 'ca-app-pub-3940256099942544/1033173712',
+        };
+        const currentPlatform = (typeof Capacitor !== 'undefined') ? Capacitor.getPlatform() : 'web';
+        const ADMOB_INTERSTITIAL_ID = ADMOB_IDS[currentPlatform] || ADMOB_IDS.ios;
 
         // App Tracking Transparency (ATT) - iOS 14.5+ で必須
         async function requestTrackingPermission() {
