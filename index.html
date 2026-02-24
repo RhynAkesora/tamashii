@@ -4613,12 +4613,14 @@
             }
         }
 
-        // コンソール用デバッグコマンド
-        window.resetTutorial = function() {
-            localStorage.removeItem('tamashii_shown_tutorial');
-            shownTutorial = false;
-            console.log('初回起動フラグをリセットしました。リロードしてください。');
-        };
+        // コンソール用デバッグコマンド（開発時のみ）
+        if (!IS_PRODUCTION) {
+            window.resetTutorial = function() {
+                localStorage.removeItem('tamashii_shown_tutorial');
+                shownTutorial = false;
+                console.log('初回起動フラグをリセットしました。リロードしてください。');
+            };
+        }
 
         // ゲーム開始
         init();
