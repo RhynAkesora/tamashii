@@ -3393,7 +3393,10 @@
                 gameState = 'howToPlay';
                 drawHowToPlayScreen();
             } else if (hitPrivacy) {
-                window.open('https://nullpoworks.github.io/privacy-policy.html', '_blank');
+                const privacyUrl = currentLang === 'en'
+                    ? 'https://nullpoworks.github.io/privacy-policy-en.html'
+                    : 'https://nullpoworks.github.io/privacy-policy.html';
+                window.open(privacyUrl, '_blank');
             } else if (hitBack) {
                 if (settingsReturnTo === 'playing' && !shownTutorial) {
                     // 初回: 設定→遊び方画面→ゲーム開始
