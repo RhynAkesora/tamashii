@@ -314,6 +314,7 @@
                 rule7: '3コンボでフィーバー突入！',
                 welcomeMsg: 'はじめに設定と遊び方をご案内します',
                 welcomeTap: 'タップして進む',
+                privacyPolicy: 'プライバシーポリシー',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -340,6 +341,7 @@
                 rule7: '3 combos activates Fever mode!',
                 welcomeMsg: 'First, let us set up and show you how to play',
                 welcomeTap: 'Tap to continue',
+                privacyPolicy: 'Privacy Policy',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -3085,13 +3087,14 @@
             const contentTop = winY + 70;
             const contentBottom = winBottom - 70;
             const contentH = contentBottom - contentTop;
-            // 初回設定では遊び方ボタンを非表示（3段）、通常は4段
+            // 初回設定では遊び方ボタンを非表示（3段）、通常は5段
             const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
-            const slots = isFirstSetup ? 3 : 4;
+            const slots = isFirstSetup ? 3 : 5;
             const gap = contentH / slots;
             const soundY = contentTop + gap * 0.5 - btnHeight / 2;
             const langY = contentTop + gap * 1.5 - btnHeight / 2;
             const howToPlayY = isFirstSetup ? -999 : contentTop + gap * 2.5 - btnHeight / 2;
+            const privacyY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
             const backY = contentTop + gap * (slots - 0.5) - btnHeight / 2;
             // 言語: 2つの横並びボタン
             const langGap = 10;
@@ -3101,6 +3104,7 @@
                 langJa:   { x: btnX, y: langY, w: langBtnW, h: btnHeight },
                 langEn:   { x: btnX + langBtnW + langGap, y: langY, w: langBtnW, h: btnHeight },
                 howToPlay:{ x: btnX, y: howToPlayY, w: btnWidth, h: btnHeight },
+                privacy:  { x: btnX, y: privacyY, w: btnWidth, h: btnHeight },
                 back:     { x: btnX, y: backY, w: btnWidth, h: btnHeight }
             };
         }
@@ -3325,6 +3329,12 @@
                     t('howToPlay'), 'blue');
             }
 
+            // プライバシーポリシーボタン（初回設定では非表示）
+            if (btns.privacy.y >= 0) {
+                drawSFCButton(btns.privacy.x, btns.privacy.y, btns.privacy.w, btns.privacy.h,
+                    t('privacyPolicy'), 'blue');
+            }
+
             // 戻る/進むボタン
             if (settingsReturnTo === 'playing' && !shownTutorial) {
                 drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('proceed'), 'green');
@@ -3355,6 +3365,8 @@
                               y >= btns.langEn.y && y <= btns.langEn.y + btns.langEn.h;
             const hitHowToPlay = x >= btns.howToPlay.x && x <= btns.howToPlay.x + btns.howToPlay.w &&
                                 y >= btns.howToPlay.y && y <= btns.howToPlay.y + btns.howToPlay.h;
+            const hitPrivacy = x >= btns.privacy.x && x <= btns.privacy.x + btns.privacy.w &&
+                               y >= btns.privacy.y && y <= btns.privacy.y + btns.privacy.h;
             const hitBack = x >= btns.back.x && x <= btns.back.x + btns.back.w &&
                             y >= btns.back.y && y <= btns.back.y + btns.back.h;
 
@@ -3380,6 +3392,8 @@
                 howToPlayShownAt = Date.now();
                 gameState = 'howToPlay';
                 drawHowToPlayScreen();
+            } else if (hitPrivacy) {
+                window.open('https://nullpoworks.github.io/privacy-policy.html', '_blank');
             } else if (hitBack) {
                 if (settingsReturnTo === 'playing' && !shownTutorial) {
                     // 初回: 設定→遊び方画面→ゲーム開始
