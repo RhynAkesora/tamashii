@@ -6,6 +6,7 @@
     <title>魂の共鳴 ～私を信じて～</title>
     
     <meta name="description" content="魂のステージを上げるパズルゲーム - 魂の共鳴">
+    <meta name="rating" content="general">
     <meta name="theme-color" content="#2c5aa0">
     
     <!-- アイコン -->
@@ -147,9 +148,57 @@
             color: white;
             cursor: pointer;
         }
+
+        /* スプラッシュスクリーン（JS不要、即座に表示） */
+        #splashScreen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 9999;
+            background: linear-gradient(180deg, #08031a 0%, #100828 50%, #05020f 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s ease-out;
+        }
+        #splashScreen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #splashScreen .splash-title {
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(28px, 8vw, 48px);
+            font-weight: bold;
+            color: #e8d090;
+            text-shadow: 0 0 20px rgba(160, 120, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.8);
+            margin-bottom: 12px;
+        }
+        #splashScreen .splash-subtitle {
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(12px, 3.5vw, 18px);
+            color: rgba(200, 180, 150, 0.6);
+        }
+        @keyframes splash-pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+        #splashScreen .splash-loading {
+            margin-top: 40px;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: rgba(200, 180, 150, 0.5);
+            animation: splash-pulse 1.5s ease-in-out infinite;
+        }
     </style>
 </head>
 <body>
+    <!-- スプラッシュスクリーン（JS不要、即座に表示） -->
+    <div id="splashScreen">
+        <div class="splash-title">魂の共鳴</div>
+        <div class="splash-subtitle">～私を信じて～</div>
+        <div class="splash-loading">Loading...</div>
+    </div>
+
     <div id="safeAreaHelper"></div>
     <div id="gameContainer">
         <div id="scoreDisplay">
@@ -315,6 +364,8 @@
                 welcomeMsg: 'はじめに設定と遊び方をご案内します',
                 welcomeTap: 'タップして進む',
                 privacyPolicy: 'プライバシーポリシー',
+                termsOfService: '利用規約',
+                contact: 'お問い合わせ',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -342,6 +393,8 @@
                 welcomeMsg: 'First, let us set up and show you how to play',
                 welcomeTap: 'Tap to continue',
                 privacyPolicy: 'Privacy Policy',
+                termsOfService: 'Terms of Service',
+                contact: 'Contact',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -404,13 +457,35 @@
         const AD_SHOW_INTERVAL = 3;
 
         // ★本番リリース時: IS_PRODUCTION を true に変更する
-        const IS_PRODUCTION = false;
+        const IS_PRODUCTION = true;
         const ADMOB_INTERSTITIAL_ID = IS_PRODUCTION
             ? 'ca-app-pub-4148293353679224/9166455565'   // 本番ID
             : 'ca-app-pub-3940256099942544/1033173712';  // テスト用ID
 
+        // App Tracking Transparency (ATT) - iOS 14.5+ で必須
+        async function requestTrackingPermission() {
+            try {
+                const { AppTrackingTransparency } = await import('capacitor-plugin-app-tracking-transparency');
+                const status = await AppTrackingTransparency.getStatus();
+                // まだ確認していない場合のみリクエスト
+                if (status.status === 'notDetermined') {
+                    const result = await AppTrackingTransparency.requestPermission();
+                    console.log('ATT許可結果:', result.status);
+                    return result.status;
+                }
+                console.log('ATT既存ステータス:', status.status);
+                return status.status;
+            } catch(e) {
+                console.warn('ATT未対応環境:', e);
+                return 'notSupported';
+            }
+        }
+
         async function initAdMob() {
             try {
+                // ATT許可をAdMob初期化より先にリクエスト（iOS要件）
+                await requestTrackingPermission();
+
                 const { AdMob } = await import('@capacitor-community/admob');
                 adMob = AdMob;
                 await adMob.initialize({ initializeForTesting: !IS_PRODUCTION });
@@ -3087,14 +3162,16 @@
             const contentTop = winY + 70;
             const contentBottom = winBottom - 70;
             const contentH = contentBottom - contentTop;
-            // 初回設定では遊び方ボタンを非表示（3段）、通常は5段
+            // 初回設定では遊び方ボタンを非表示（3段）、通常は7段
             const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
-            const slots = isFirstSetup ? 3 : 5;
+            const slots = isFirstSetup ? 3 : 7;
             const gap = contentH / slots;
             const soundY = contentTop + gap * 0.5 - btnHeight / 2;
             const langY = contentTop + gap * 1.5 - btnHeight / 2;
             const howToPlayY = isFirstSetup ? -999 : contentTop + gap * 2.5 - btnHeight / 2;
             const privacyY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
+            const termsY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
+            const contactY = isFirstSetup ? -999 : contentTop + gap * 5.5 - btnHeight / 2;
             const backY = contentTop + gap * (slots - 0.5) - btnHeight / 2;
             // 言語: 2つの横並びボタン
             const langGap = 10;
@@ -3105,6 +3182,8 @@
                 langEn:   { x: btnX + langBtnW + langGap, y: langY, w: langBtnW, h: btnHeight },
                 howToPlay:{ x: btnX, y: howToPlayY, w: btnWidth, h: btnHeight },
                 privacy:  { x: btnX, y: privacyY, w: btnWidth, h: btnHeight },
+                terms:    { x: btnX, y: termsY, w: btnWidth, h: btnHeight },
+                contact:  { x: btnX, y: contactY, w: btnWidth, h: btnHeight },
                 back:     { x: btnX, y: backY, w: btnWidth, h: btnHeight }
             };
         }
@@ -3335,6 +3414,18 @@
                     t('privacyPolicy'), 'blue');
             }
 
+            // 利用規約ボタン（初回設定では非表示）
+            if (btns.terms.y >= 0) {
+                drawSFCButton(btns.terms.x, btns.terms.y, btns.terms.w, btns.terms.h,
+                    t('termsOfService'), 'blue');
+            }
+
+            // お問い合わせボタン（初回設定では非表示）
+            if (btns.contact.y >= 0) {
+                drawSFCButton(btns.contact.x, btns.contact.y, btns.contact.w, btns.contact.h,
+                    t('contact'), 'blue');
+            }
+
             // 戻る/進むボタン
             if (settingsReturnTo === 'playing' && !shownTutorial) {
                 drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('proceed'), 'green');
@@ -3367,6 +3458,10 @@
                                 y >= btns.howToPlay.y && y <= btns.howToPlay.y + btns.howToPlay.h;
             const hitPrivacy = x >= btns.privacy.x && x <= btns.privacy.x + btns.privacy.w &&
                                y >= btns.privacy.y && y <= btns.privacy.y + btns.privacy.h;
+            const hitTerms = x >= btns.terms.x && x <= btns.terms.x + btns.terms.w &&
+                             y >= btns.terms.y && y <= btns.terms.y + btns.terms.h;
+            const hitContact = x >= btns.contact.x && x <= btns.contact.x + btns.contact.w &&
+                               y >= btns.contact.y && y <= btns.contact.y + btns.contact.h;
             const hitBack = x >= btns.back.x && x <= btns.back.x + btns.back.w &&
                             y >= btns.back.y && y <= btns.back.y + btns.back.h;
 
@@ -3397,6 +3492,13 @@
                     ? 'https://nullpoworks.github.io/privacy-policy-en.html'
                     : 'https://nullpoworks.github.io/privacy-policy.html';
                 window.open(privacyUrl, '_blank');
+            } else if (hitTerms) {
+                const termsUrl = currentLang === 'en'
+                    ? 'https://nullpoworks.github.io/terms-tamashii-en.html'
+                    : 'https://nullpoworks.github.io/terms-tamashii.html';
+                window.open(termsUrl, '_blank');
+            } else if (hitContact) {
+                window.open('https://nullpoworks.github.io/contact.html', '_blank');
             } else if (hitBack) {
                 if (settingsReturnTo === 'playing' && !shownTutorial) {
                     // 初回: 設定→遊び方画面→ゲーム開始
@@ -4502,14 +4604,23 @@
 
             gameState = 'pleaseTap';
             animatePleaseTapScreen();
+
+            // スプラッシュスクリーンをフェードアウト
+            const splash = document.getElementById('splashScreen');
+            if (splash) {
+                splash.classList.add('hidden');
+                setTimeout(() => splash.remove(), 600);
+            }
         }
 
-        // コンソール用デバッグコマンド
-        window.resetTutorial = function() {
-            localStorage.removeItem('tamashii_shown_tutorial');
-            shownTutorial = false;
-            console.log('初回起動フラグをリセットしました。リロードしてください。');
-        };
+        // コンソール用デバッグコマンド（開発時のみ）
+        if (!IS_PRODUCTION) {
+            window.resetTutorial = function() {
+                localStorage.removeItem('tamashii_shown_tutorial');
+                shownTutorial = false;
+                console.log('初回起動フラグをリセットしました。リロードしてください。');
+            };
+        }
 
         // ゲーム開始
         init();
