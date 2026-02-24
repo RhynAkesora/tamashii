@@ -6,6 +6,7 @@
     <title>魂の共鳴 ～私を信じて～</title>
     
     <meta name="description" content="魂のステージを上げるパズルゲーム - 魂の共鳴">
+    <meta name="rating" content="general">
     <meta name="theme-color" content="#2c5aa0">
     
     <!-- アイコン -->
@@ -147,9 +148,57 @@
             color: white;
             cursor: pointer;
         }
+
+        /* スプラッシュスクリーン（JS不要、即座に表示） */
+        #splashScreen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 9999;
+            background: linear-gradient(180deg, #08031a 0%, #100828 50%, #05020f 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s ease-out;
+        }
+        #splashScreen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #splashScreen .splash-title {
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(28px, 8vw, 48px);
+            font-weight: bold;
+            color: #e8d090;
+            text-shadow: 0 0 20px rgba(160, 120, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.8);
+            margin-bottom: 12px;
+        }
+        #splashScreen .splash-subtitle {
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(12px, 3.5vw, 18px);
+            color: rgba(200, 180, 150, 0.6);
+        }
+        @keyframes splash-pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+        #splashScreen .splash-loading {
+            margin-top: 40px;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: rgba(200, 180, 150, 0.5);
+            animation: splash-pulse 1.5s ease-in-out infinite;
+        }
     </style>
 </head>
 <body>
+    <!-- スプラッシュスクリーン（JS不要、即座に表示） -->
+    <div id="splashScreen">
+        <div class="splash-title">魂の共鳴</div>
+        <div class="splash-subtitle">～私を信じて～</div>
+        <div class="splash-loading">Loading...</div>
+    </div>
+
     <div id="safeAreaHelper"></div>
     <div id="gameContainer">
         <div id="scoreDisplay">
@@ -4555,6 +4604,13 @@
 
             gameState = 'pleaseTap';
             animatePleaseTapScreen();
+
+            // スプラッシュスクリーンをフェードアウト
+            const splash = document.getElementById('splashScreen');
+            if (splash) {
+                splash.classList.add('hidden');
+                setTimeout(() => splash.remove(), 600);
+            }
         }
 
         // コンソール用デバッグコマンド
