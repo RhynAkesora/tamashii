@@ -404,13 +404,35 @@
         const AD_SHOW_INTERVAL = 3;
 
         // ★本番リリース時: IS_PRODUCTION を true に変更する
-        const IS_PRODUCTION = false;
+        const IS_PRODUCTION = true;
         const ADMOB_INTERSTITIAL_ID = IS_PRODUCTION
             ? 'ca-app-pub-4148293353679224/9166455565'   // 本番ID
             : 'ca-app-pub-3940256099942544/1033173712';  // テスト用ID
 
+        // App Tracking Transparency (ATT) - iOS 14.5+ で必須
+        async function requestTrackingPermission() {
+            try {
+                const { AppTrackingTransparency } = await import('capacitor-plugin-app-tracking-transparency');
+                const status = await AppTrackingTransparency.getStatus();
+                // まだ確認していない場合のみリクエスト
+                if (status.status === 'notDetermined') {
+                    const result = await AppTrackingTransparency.requestPermission();
+                    console.log('ATT許可結果:', result.status);
+                    return result.status;
+                }
+                console.log('ATT既存ステータス:', status.status);
+                return status.status;
+            } catch(e) {
+                console.warn('ATT未対応環境:', e);
+                return 'notSupported';
+            }
+        }
+
         async function initAdMob() {
             try {
+                // ATT許可をAdMob初期化より先にリクエスト（iOS要件）
+                await requestTrackingPermission();
+
                 const { AdMob } = await import('@capacitor-community/admob');
                 adMob = AdMob;
                 await adMob.initialize({ initializeForTesting: !IS_PRODUCTION });
