@@ -231,7 +231,7 @@
                 import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js")
             ]);
         } catch(e) {
-            console.warn("Firebase SDK読み込み失敗。オフラインモードで起動します:", e);
+            // Firebase SDK読み込み失敗 → オフラインモードで起動
         }
         
         // Canvas要素とコンテキストの取得
@@ -338,7 +338,11 @@
         // ゲームオーバー画面のタップ受付フラグ
         let gameOverReady = false;
         let rankPosition = 0; // ランクイン順位（0=ランク外）
-        let personalBest = JSON.parse(localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
+        // localStorageキーを tamashii_ プレフィックスに統一（旧キーからの移行も対応）
+        let personalBest = JSON.parse(localStorage.getItem('tamashii_personalBest') || localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
+        if (localStorage.getItem('personalBest') && !localStorage.getItem('tamashii_personalBest')) {
+            try { localStorage.setItem('tamashii_personalBest', localStorage.getItem('personalBest')); localStorage.removeItem('personalBest'); } catch(e) {}
+        }
         let isNewPersonalBest = false; // 今回のゲームで自己ベスト更新したか
 
         // サウンドミュート
@@ -505,13 +509,11 @@
                 // まだ確認していない場合のみリクエスト
                 if (status.status === 'notDetermined') {
                     const result = await AppTrackingTransparency.requestPermission();
-                    console.log('ATT許可結果:', result.status);
                     return result.status;
                 }
-                console.log('ATT既存ステータス:', status.status);
                 return status.status;
             } catch(e) {
-                console.warn('ATT未対応環境:', e);
+                // ATT未対応環境
                 return 'notSupported';
             }
         }
@@ -524,9 +526,8 @@
                 const { AdMob } = await import('@capacitor-community/admob');
                 adMob = AdMob;
                 await adMob.initialize({ initializeForTesting: !IS_PRODUCTION });
-                console.log('AdMob初期化完了 (production:', IS_PRODUCTION, ')');
             } catch(e) {
-                console.warn('AdMob未対応環境（ブラウザ等）:', e);
+                // AdMob未対応環境（ブラウザ等）
             }
         }
 
@@ -541,7 +542,7 @@
                 });
                 await adMob.showInterstitial();
             } catch(e) {
-                console.warn('広告表示失敗:', e);
+                // 広告表示失敗
             }
         }
 
@@ -564,9 +565,8 @@
                     masterGain.gain.value = soundMuted ? 0 : 1.0;
                     masterGain.connect(audioCtx.destination);
                     soundsEnabled = true;
-                    console.log("AudioContextが正常に初期化されました。");
                 } catch (e) {
-                    console.error("Web Audio APIはこのブラウザではサポートされていません。", e);
+                    // Web Audio API未サポート
                 }
             } else if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
@@ -770,7 +770,7 @@
 
         async function initFirebase() {
             if (!firebaseApp || !firebaseAuth || !firebaseFirestore) {
-                console.warn("Firebase SDK未読み込みのためスキップ");
+                // Firebase SDK未読み込みのためスキップ
                 db = null;
                 return;
             }
@@ -783,9 +783,7 @@
                 auth = getAuth(app);
                 
                 await signInAnonymously(auth);
-                console.log('Firebase initialized and signed in anonymously.');
             } catch (error) {
-                console.error("Firebaseの初期化に失敗しました:", error);
                 db = null; 
             }
         }
@@ -814,9 +812,7 @@
                     maxCombo: finalMaxCombo,
                     createdAt: serverTimestamp()
                 });
-                console.log("ハイスコアを保存しました。");
             } catch (error) {
-                console.error("ハイスコアの保存に失敗しました: ", error);
             }
         }
 
@@ -834,9 +830,7 @@
                 const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(20));
                 const querySnapshot = await getDocs(q);
                 highScores = querySnapshot.docs.map(doc => doc.data());
-            } catch (error)
-            {
-                console.error("ハイスコアの取得に失敗しました: ", error);
+            } catch (error) {
                 highScores = [];
             }
         }
@@ -2374,7 +2368,7 @@
             isNewPersonalBest = score > personalBest.score;
             if (isNewPersonalBest) {
                 personalBest = { score, maxCombo, date: new Date().toISOString() };
-                try { localStorage.setItem('personalBest', JSON.stringify(personalBest)); } catch(e) {}
+                try { localStorage.setItem('tamashii_personalBest', JSON.stringify(personalBest)); } catch(e) {}
             }
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             resizeCanvas();
@@ -2756,11 +2750,10 @@
                 audio.loop = loop;
                 audio.volume = 0.7;
                 audio.preload = 'auto';
-                audio.addEventListener('canplaythrough', () => console.log(`${label}の読み込み完了`));
-                audio.addEventListener('error', (e) => console.error(`${label}の読み込みに失敗:`, e));
+                audio.addEventListener('error', () => {});
                 return audio;
             } catch (error) {
-                console.error(`${label}の初期化に失敗:`, error);
+                // BGM初期化失敗
                 return null;
             }
         }
@@ -2784,10 +2777,10 @@
                 .then(decoded => {
                     if (decoded) {
                         flashSoundBuffer = decoded;
-                        console.log('全消去SEの読み込み完了（Web Audio API）');
+                        // 全消去SE読み込み完了
                     }
                 })
-                .catch(e => { console.error('全消去SEの読み込みに失敗しました:', e); flashSoundBuffer = null; });
+                .catch(() => { flashSoundBuffer = null; });
         }
 
         let flashSoundSource = null; // 再生中のソースノード
@@ -2845,7 +2838,7 @@
 
         function playBGM() { stopAllBGM(); const bgm = getStageBGM(); currentStageBgm = bgm; activeBGM = bgm; if (bgm) { try { bgm.currentTime = 0; bgm.volume = 0.7; if (!soundMuted) bgm.play().catch(e => {}); } catch (e) {} } }
         function playTitleBGM() { stopAllBGM(); activeBGM = titleBgmAudio; if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.volume = 0.7; if (!soundMuted) titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playGameOverBGM() { stopAllBGM(); if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); activeBGM = gameoverBgmAudio; if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; if (!soundMuted) gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
+        function playGameOverBGM() { stopAllBGM(); if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); activeBGM = gameoverBgmAudio; if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; if (!soundMuted) gameoverBgmAudio.play().catch(e => {}); } catch (e) {} } }
         function playGameOverBGMDelayed() {
             stopAllBGM();
             // ゲームオーバーSE終了後にBGMを再生（1300ms後）
@@ -2881,7 +2874,7 @@
         function loadYogaImage() {
             const img = new Image();
             img.onload = () => { yogaImage = img; if (gameState === 'title') { drawTitleScreen(); } };
-            img.onerror = () => { console.error('ヨガ画像の読み込みに失敗しました'); yogaImage = null; };
+            img.onerror = () => { yogaImage = null; };
             img.src = 'yoga01.png';
         }
 
@@ -2891,7 +2884,7 @@
         function loadLogoImage() {
             const img = new Image();
             img.onload = () => { logoImage = img; };
-            img.onerror = () => { console.error('ロゴ画像の読み込みに失敗しました'); logoImage = null; };
+            img.onerror = () => { logoImage = null; };
             img.src = 'logo-white.png';
         }
 
@@ -2901,7 +2894,7 @@
         function loadTitleImage() {
             const img = new Image();
             img.onload = () => { titleImage = img; if (gameState === 'title') drawTitleScreen(); };
-            img.onerror = () => { console.error('タイトル画像の読み込みに失敗しました'); titleImage = null; };
+            img.onerror = () => { titleImage = null; };
             img.src = 'game-title.png';
         }
 
