@@ -271,6 +271,8 @@
         const NEXT_PIECE_LABEL = 'NEXT';
         const SPEED_INCREASE_RATE = 0.975;
         const SPEED_INCREASE_INTERVAL = 4;
+        const LOCK_DELAY_FRAMES = 30; // 着地後の猶予フレーム数（0.5秒 @60fps）
+        const LOCK_DELAY_MAX_MOVES = 15; // ロックディレイ中の最大操作回数
 
         // ゲーム変数
         let cellSize, sandSize;
@@ -297,6 +299,8 @@
         let isTouchHolding = false;
         let lastTouchEndTime = 0; // タッチ+クリック二重発火防止用
         let fallSpeed = 30;
+        let lockDelayTimer = 0; // ロックディレイ残りフレーム
+        let lockDelayMoveCount = 0; // ロックディレイ中の操作回数
         let totalLinesCleared = 0;
         let gameStartTime = 0;
         let playTimeSeconds = 0;
@@ -357,7 +361,7 @@
                 linesLabel: '消去ライン', comboLabel: 'コンボ', levelLabel: 'レベル',
                 howToPlay: '遊び方', howToPlayTitle: '遊び方', proceed: '進む',
                 rule1: '左右スワイプ：ブロック移動',
-                rule2: 'タップ：ブロック回転',
+                rule2: '左タップ：左回転 / 右タップ：右回転',
                 rule3: '下スワイプ：高速落下',
                 rule4: '横一列を同じ色で埋めるとライン消去',
                 rule5: 'コンボでスコアアップ！',
@@ -390,7 +394,7 @@
                 linesLabel: 'Lines', comboLabel: 'Combo', levelLabel: 'Level',
                 howToPlay: 'How to Play', howToPlayTitle: 'How to Play', proceed: 'Next',
                 rule1: 'Swipe left/right: Move block',
-                rule2: 'Tap: Rotate block',
+                rule2: 'Left tap: Rotate left / Right tap: Rotate right',
                 rule3: 'Swipe down: Drop block',
                 rule4: 'Fill a row with one color to clear it',
                 rule5: 'Chain combos for bonus points!',
@@ -1839,19 +1843,48 @@
         }
 
         /**
-         * ピースを回転させる
+         * ピースを回転させる（direction: 1=右回転(時計回り), -1=左回転(反時計回り)）
          */
-        function rotate() {
+        function rotate(direction) {
             if (!currentPiece) return;
-            const rotated = currentPiece.shape[0].map((_, i) => 
-                currentPiece.shape.map(row => row[i]).reverse()
-            );
-            const previousShape = currentPiece.shape;
-            currentPiece.shape = rotated;
-            if (!canMove(0, 0)) {
-                currentPiece.shape = previousShape;
+            direction = direction || 1;
+            let rotated;
+            if (direction === 1) {
+                // 右回転（時計回り）: 転置して各行反転
+                rotated = currentPiece.shape[0].map((_, i) =>
+                    currentPiece.shape.map(row => row[i]).reverse()
+                );
             } else {
+                // 左回転（反時計回り）: 各行反転して転置
+                rotated = currentPiece.shape[0].map((_, i) =>
+                    currentPiece.shape.map(row => row[row.length - 1 - i])
+                );
+            }
+            const previousShape = currentPiece.shape;
+            const previousX = currentPiece.x;
+            currentPiece.shape = rotated;
+
+            // 壁キック: 回転が無効な場合、左右にずらして再試行
+            const kicks = [0, -1, 1, -2, 2];
+            let success = false;
+            for (const kick of kicks) {
+                currentPiece.x = previousX + kick;
+                if (canMove(0, 0)) {
+                    success = true;
+                    break;
+                }
+            }
+
+            if (success) {
+                // ロックディレイのリセット（着地中に回転成功した場合）
+                if (lockDelayTimer > 0) {
+                    lockDelayTimer = LOCK_DELAY_FRAMES;
+                    lockDelayMoveCount++;
+                }
                 playRotateSound();
+            } else {
+                currentPiece.shape = previousShape;
+                currentPiece.x = previousX;
             }
         }
 
@@ -3836,6 +3869,8 @@
             isNewPersonalBest = false;
             totalLinesCleared = 0;
             isSettling = false;
+            lockDelayTimer = 0;
+            lockDelayMoveCount = 0;
             isClearing = false;
             isFlashing = false;
             flashTimer = 0;
@@ -4071,9 +4106,34 @@
                 if (frameCount % Math.floor(fallSpeed) === 0) {
                     if (canMove(0, 1)) {
                         currentPiece.y++;
-                    } else {
+                        // 下に移動できた場合、ロックディレイをリセット
+                        lockDelayTimer = 0;
+                        lockDelayMoveCount = 0;
+                    } else if (lockDelayTimer === 0) {
+                        // 着地した瞬間: ロックディレイ開始
+                        lockDelayTimer = LOCK_DELAY_FRAMES;
+                        lockDelayMoveCount = 0;
+                    }
+                }
+                // ロックディレイのカウントダウン
+                if (lockDelayTimer > 0) {
+                    // 操作回数上限を超えた、または再び下に移動可能になった場合
+                    if (canMove(0, 1)) {
+                        lockDelayTimer = 0;
+                        lockDelayMoveCount = 0;
+                    } else if (lockDelayMoveCount >= LOCK_DELAY_MAX_MOVES) {
+                        lockDelayTimer = 0;
+                        lockDelayMoveCount = 0;
                         mergePiece();
                         isSettling = true;
+                    } else {
+                        lockDelayTimer--;
+                        if (lockDelayTimer <= 0) {
+                            lockDelayTimer = 0;
+                            lockDelayMoveCount = 0;
+                            mergePiece();
+                            isSettling = true;
+                        }
                     }
                 }
             }
@@ -4163,19 +4223,34 @@
                     if (canMove(-1, 0)) {
                         currentPiece.x--;
                         playMoveSound();
+                        // ロックディレイ中の移動でタイマーリセット
+                        if (lockDelayTimer > 0) {
+                            lockDelayTimer = LOCK_DELAY_FRAMES;
+                            lockDelayMoveCount++;
+                        }
                     }
                     break;
                 case 'right':
                     if (canMove(1, 0)) {
                         currentPiece.x++;
                         playMoveSound();
+                        if (lockDelayTimer > 0) {
+                            lockDelayTimer = LOCK_DELAY_FRAMES;
+                            lockDelayMoveCount++;
+                        }
                     }
                     break;
-                case 'rotate':
-                    rotate();
+                case 'rotateRight':
+                    rotate(1);
+                    break;
+                case 'rotateLeft':
+                    rotate(-1);
                     break;
                 case 'drop':
                     playDropSound();
+                    // ハードドロップはロックディレイを無視して即固定
+                    lockDelayTimer = 0;
+                    lockDelayMoveCount = 0;
                     while (canMove(0, 1)) {
                         currentPiece.y++;
                         score += 1;
@@ -4586,7 +4661,9 @@
                     const deltaX = touch.clientX - touchStartX;
                     const deltaY = touch.clientY - touchStartY;
                     if (touchDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && isTouchHolding) {
-                        handleTouch('rotate');
+                        // 画面左半分=左回転、右半分=右回転
+                        const halfX = canvas.width / 2;
+                        handleTouch(x < halfX ? 'rotateLeft' : 'rotateRight');
                     }
                     isTouchHolding = false;
                 } else {
