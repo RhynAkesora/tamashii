@@ -231,7 +231,7 @@
                 import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js")
             ]);
         } catch(e) {
-            console.warn("Firebase SDK読み込み失敗。オフラインモードで起動します:", e);
+            // Firebase SDK読み込み失敗 → オフラインモードで起動
         }
         
         // Canvas要素とコンテキストの取得
@@ -273,75 +273,90 @@
         const SPEED_INCREASE_INTERVAL = 4;
         const LOCK_DELAY_FRAMES = 30; // 着地後の猶予フレーム数（0.5秒 @60fps）
         const LOCK_DELAY_MAX_MOVES = 15; // ロックディレイ中の最大操作回数
+        const BGM_VOLUME = 0.7;
+        const SMALL_SCREEN_THRESHOLD = 600; // 小画面判定の高さ閾値(px)
+        const GAMEOVER_BGM_DELAY = 1300; // ゲームオーバーSE後のBGM再生遅延(ms)
 
-        // ゲーム変数
+        // ===== ゲームコア状態 =====
         let cellSize, sandSize;
         let sandParticles = [];
-        let currentPiece;
-        let nextPiece;
-        let nextPiece2;
+        let currentPiece, nextPiece, nextPiece2;
         let holdPiece = null;
-        let holdUsed = false; // 1ターンに1回だけホールド可能
+        let holdUsed = false;
         let score = 0;
         let gameLoop;
         let frameCount = 0;
+        let gameState = 'pleaseTap';
+        let fallSpeed = 30;
+        let totalLinesCleared = 0;
+        let gameStartTime = 0;
+        let playTimeSeconds = 0;
+        let comboCount = 0;
+        let maxCombo = 0;
+        let comboDisplayTimeout;
+        let overflowDetected = false;
+
+        // ===== ライン消去・フラッシュ =====
         let isSettling = false;
         let isClearing = false;
         let isFlashing = false;
         let flashTimer = 0;
         let flashKeys = null;
         let pendingClearedLines = 0;
-        let overflowDetected = false;
-        let comboCount = 0;
-        let maxCombo = 0;
-        let gameState = 'pleaseTap';
-        let comboDisplayTimeout;
+
+        // ===== ロックディレイ・ソフトドロップ =====
+        let lockDelayTimer = 0;
+        let lockDelayMoveCount = 0;
+        let softDropTimer = null;
+        let softDropInterval = null;
+        let isSoftDropping = false;
+        const SOFT_DROP_DELAY = 300;
+        const SOFT_DROP_SPEED = 50;
+
+        // ===== タッチ入力 =====
         let touchStartX = 0;
         let touchStartY = 0;
         let touchStartTime = 0;
         let isTouchHolding = false;
-        let lastTouchEndTime = 0; // タッチ+クリック二重発火防止用
-        let softDropTimer = null; // ソフトドロップ長押しタイマー
-        let softDropInterval = null; // ソフトドロップ繰り返しタイマー
-        let isSoftDropping = false; // ソフトドロップ中フラグ
-        const SOFT_DROP_DELAY = 300; // 長押し判定までの時間(ms)
-        const SOFT_DROP_SPEED = 50; // ソフトドロップの落下間隔(ms)
-        let fallSpeed = 30;
-        let lockDelayTimer = 0; // ロックディレイ残りフレーム
-        let lockDelayMoveCount = 0; // ロックディレイ中の操作回数
-        let totalLinesCleared = 0;
-        let gameStartTime = 0;
-        let playTimeSeconds = 0;
-        let yogaImage = null;
-        let logoImage = null;
-        let titleImage = null; // タイトルロゴ画像
-        let bgmAudio = null;
-        let spaceBgmAudio = null;
-        let currentStageBgm = null; // 現在のステージで使うBGM（通常 or 宇宙）
-        let gameoverBgmAudio = null;
-        let titleBgmAudio = null;
-        let highScoreBgmAudio = null;
-        let flashSoundBuffer = null; // ALL CLEAR効果音（Web Audio APIバッファ）
+        let lastTouchEndTime = 0;
+
+        // ===== UI領域 =====
+        let holdBoxRect = null;
+        let nextBoxRect = null;
+        let pauseConfirmQuit = false;
         let pleaseTapAnimation = null;
-        
-        // オーディオ関連の変数
+
+        // ===== ゲームオーバー・スコア =====
+        let gameOverReady = false;
+        let rankPosition = 0;
+        // localStorageキーを tamashii_ プレフィックスに統一（旧キーからの移行も対応）
+        let personalBest = JSON.parse(localStorage.getItem('tamashii_personalBest') || localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
+        if (localStorage.getItem('personalBest') && !localStorage.getItem('tamashii_personalBest')) {
+            try { localStorage.setItem('tamashii_personalBest', localStorage.getItem('personalBest')); localStorage.removeItem('personalBest'); } catch(e) {}
+        }
+        let isNewPersonalBest = false;
+
+        // ===== オーディオ =====
         let audioCtx;
         let soundsEnabled = false;
         let masterGain = null;
-
-        // ポーズ確認ダイアログ
-        let pauseConfirmQuit = false;
-
-        // ゲームオーバー画面のタップ受付フラグ
-        let gameOverReady = false;
-        let rankPosition = 0; // ランクイン順位（0=ランク外）
-        let personalBest = JSON.parse(localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
-        let isNewPersonalBest = false; // 今回のゲームで自己ベスト更新したか
-
-        // サウンドミュート
         let soundMuted = false;
+        let bgmAudio = null;
+        let spaceBgmAudio = null;
+        let currentStageBgm = null;
+        let gameoverBgmAudio = null;
+        let titleBgmAudio = null;
+        let highScoreBgmAudio = null;
+        let feverBgmAudio = null;
+        let activeBGM = null;
+        let flashSoundBuffer = null;
 
-        // 言語設定・i18n
+        // ===== 画像アセット =====
+        let yogaImage = null;
+        let logoImage = null;
+        let titleImage = null;
+
+        // ===== 言語・画面遷移 =====
         let currentLang = 'ja';
         let settingsReturnTo = 'title';
         let shownTutorial = false;
@@ -371,8 +386,8 @@
                 rule1: '左右スワイプ：ブロック移動',
                 rule2: '左タップ：左回転 / 右タップ：右回転',
                 rule3: '下スワイプ：高速落下',
-                rule3b: '上スワイプ：ホールド（今のピースを保管）',
-                rule3b2: '　→ もう一度で保管ピースと交換',
+                rule3b: 'HOLD/NEXTをタップ：ホールド（保管）',
+                rule3b2: '　→ もう一度タップで保管ピースと交換',
                 rule3c: '長押し：ソフトドロップ（加速落下）',
                 rule4: '横一列を同じ色で埋めるとライン消去',
                 rule5: 'コンボでスコアアップ！',
@@ -407,8 +422,8 @@
                 rule1: 'Swipe left/right: Move block',
                 rule2: 'Left tap: Rotate left / Right tap: Rotate right',
                 rule3: 'Swipe down: Drop block',
-                rule3b: 'Swipe up: Hold (store current piece)',
-                rule3b2: '　→ Swipe up again to swap back',
+                rule3b: 'Tap HOLD/NEXT: Hold (store piece)',
+                rule3b2: '　→ Tap again to swap back',
                 rule3c: 'Long press: Soft drop (accelerate)',
                 rule4: 'Fill a row with one color to clear it',
                 rule5: 'Chain combos for bonus points!',
@@ -445,7 +460,7 @@
             } catch(e) {}
         }
 
-        // ハイスコア画面スクロール
+        // ===== ハイスコア画面スクロール =====
         let hsScrollY = 0;
         let hsScrollVelocity = 0;
         let hsTouchStartY = 0;
@@ -454,7 +469,7 @@
         let hsIsDragging = false;
         let hsAnimFrame = null;
 
-        // エフェクト関連の変数
+        // ===== エフェクト・フィーバー =====
         let visualEffects = [];
         let floatingTexts = [];
         let shakeDuration = 0;
@@ -470,15 +485,13 @@
         const FEVER_MAX = FEVER_DURATION * 2; // 上限40秒
         const FEVER_COMBO_THRESHOLD = 3;  // 3コンボで発動
         let pendingAllClear = false;
-        let feverBgmAudio = null;
-        let activeBGM = null; // 現在アクティブなBGM（iOS pause/play制御用）
 
-        // Firebase関連の変数
+        // ===== Firebase =====
         let db;
         let auth;
         let highScores = [];
 
-        // AdMob関連
+        // ===== AdMob =====
         let adMob = null;
         let gameOverCount = 0;
         let adsRemoved = false;
@@ -502,13 +515,11 @@
                 // まだ確認していない場合のみリクエスト
                 if (status.status === 'notDetermined') {
                     const result = await AppTrackingTransparency.requestPermission();
-                    console.log('ATT許可結果:', result.status);
                     return result.status;
                 }
-                console.log('ATT既存ステータス:', status.status);
                 return status.status;
             } catch(e) {
-                console.warn('ATT未対応環境:', e);
+                // ATT未対応環境
                 return 'notSupported';
             }
         }
@@ -521,9 +532,8 @@
                 const { AdMob } = await import('@capacitor-community/admob');
                 adMob = AdMob;
                 await adMob.initialize({ initializeForTesting: !IS_PRODUCTION });
-                console.log('AdMob初期化完了 (production:', IS_PRODUCTION, ')');
             } catch(e) {
-                console.warn('AdMob未対応環境（ブラウザ等）:', e);
+                // AdMob未対応環境（ブラウザ等）
             }
         }
 
@@ -538,7 +548,7 @@
                 });
                 await adMob.showInterstitial();
             } catch(e) {
-                console.warn('広告表示失敗:', e);
+                // 広告表示失敗
             }
         }
 
@@ -561,9 +571,8 @@
                     masterGain.gain.value = soundMuted ? 0 : 1.0;
                     masterGain.connect(audioCtx.destination);
                     soundsEnabled = true;
-                    console.log("AudioContextが正常に初期化されました。");
                 } catch (e) {
-                    console.error("Web Audio APIはこのブラウザではサポートされていません。", e);
+                    // Web Audio API未サポート
                 }
             } else if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
@@ -577,7 +586,7 @@
                         a.volume = 0;
                         a.play().then(() => {
                             if (a !== activeBGM) { a.pause(); a.currentTime = 0; }
-                            a.volume = 0.7;
+                            a.volume = BGM_VOLUME;
                         }).catch(() => {});
                     }
                 });
@@ -767,7 +776,7 @@
 
         async function initFirebase() {
             if (!firebaseApp || !firebaseAuth || !firebaseFirestore) {
-                console.warn("Firebase SDK未読み込みのためスキップ");
+                // Firebase SDK未読み込みのためスキップ
                 db = null;
                 return;
             }
@@ -780,9 +789,7 @@
                 auth = getAuth(app);
                 
                 await signInAnonymously(auth);
-                console.log('Firebase initialized and signed in anonymously.');
             } catch (error) {
-                console.error("Firebaseの初期化に失敗しました:", error);
                 db = null; 
             }
         }
@@ -811,9 +818,7 @@
                     maxCombo: finalMaxCombo,
                     createdAt: serverTimestamp()
                 });
-                console.log("ハイスコアを保存しました。");
             } catch (error) {
-                console.error("ハイスコアの保存に失敗しました: ", error);
             }
         }
 
@@ -831,9 +836,7 @@
                 const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(20));
                 const querySnapshot = await getDocs(q);
                 highScores = querySnapshot.docs.map(doc => doc.data());
-            } catch (error)
-            {
-                console.error("ハイスコアの取得に失敗しました: ", error);
+            } catch (error) {
                 highScores = [];
             }
         }
@@ -1084,7 +1087,9 @@
                 if (cellOccupied.has(0 * gridWidth + x) || cellOccupied.has(1 * gridWidth + x)) return 2;
             }
             for (let x = 0; x < gridWidth; x++) {
-                if (cellOccupied.has(2 * gridWidth + x)) return 1;
+                for (let y = 2; y <= 4; y++) {
+                    if (cellOccupied.has(y * gridWidth + x)) return 1;
+                }
             }
             return 0;
         }
@@ -1545,6 +1550,39 @@
          */
         function drawPiece() {
             if (!currentPiece) return;
+
+            // ソフトドロップ中: 速度線エフェクト
+            if (isSoftDropping) {
+                const alpha = 0.15 + Math.sin(frameCount * 0.3) * 0.1;
+                ctx.strokeStyle = `rgba(100, 200, 255, ${alpha})`;
+                ctx.lineWidth = 1;
+                for (let y = 0; y < currentPiece.shape.length; y++) {
+                    for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                        if (currentPiece.shape[y][x]) {
+                            const px = (currentPiece.x + x) * cellSize + cellSize / 2;
+                            const py = (currentPiece.y + y) * cellSize;
+                            // 上方向に伸びる速度線（2本）
+                            const lineLen = cellSize * (1.5 + Math.random() * 1.5);
+                            ctx.globalAlpha = alpha;
+                            ctx.beginPath();
+                            ctx.moveTo(px - cellSize * 0.2, py);
+                            ctx.lineTo(px - cellSize * 0.2, py - lineLen);
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.moveTo(px + cellSize * 0.2, py);
+                            ctx.lineTo(px + cellSize * 0.2, py - lineLen);
+                            ctx.stroke();
+                            ctx.globalAlpha = 1.0;
+                        }
+                    }
+                }
+            }
+
+            // ソフトドロップ中: ピースにグロー効果
+            if (isSoftDropping) {
+                ctx.shadowColor = 'rgba(100, 200, 255, 0.6)';
+                ctx.shadowBlur = 8;
+            }
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
@@ -1556,6 +1594,10 @@
                         );
                     }
                 }
+            }
+            if (isSoftDropping) {
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
             }
         }
 
@@ -1690,6 +1732,8 @@
 
             const holdBoxX = centerX - areaW * 0.38;
             const holdBoxW = areaW * 0.76;
+            // タップ領域を保存（HOLD ラベル〜ボックス全体）
+            holdBoxRect = { x: holdBoxX, y: curY - labelFont - 4, w: holdBoxW, h: boxH + labelFont + 4 };
             ctx.fillStyle = boxBg;
             ctx.fillRect(holdBoxX, curY, holdBoxW, boxH);
 
@@ -1711,16 +1755,12 @@
                 drawMiniPiece(holdPiece, centerX, curY + boxH / 2, mainBlockSize);
                 ctx.globalAlpha = 1.0;
             } else if (gameState === 'playing') {
-                // 空のとき: ↑スワイプのヒントを表示
+                // 空のとき: TAP ヒントを表示
                 const hintSize = Math.max(10, areaW * 0.1);
                 ctx.globalAlpha = 0.4;
                 ctx.fillStyle = isWarm ? '#c0a040' : '#8899cc';
-                // 上矢印
-                ctx.font = `${hintSize * 1.5}px Arial`;
-                ctx.fillText('↑', centerX, curY + boxH / 2 - hintSize * 0.2);
-                // 補助テキスト
-                ctx.font = `${hintSize * 0.75}px Arial`;
-                ctx.fillText(currentLang === 'ja' ? 'スワイプ' : 'Swipe', centerX, curY + boxH / 2 + hintSize * 0.9);
+                ctx.font = `bold ${hintSize * 1.2}px Arial`;
+                ctx.fillText('TAP', centerX, curY + boxH / 2 + hintSize * 0.3);
                 ctx.globalAlpha = 1.0;
             }
             curY += boxH + 4;
@@ -1731,6 +1771,7 @@
             curY += 4;
 
             // ===== NEXT 1 =====
+            const nextStartY = curY;
             ctx.font = `bold ${labelFont}px Arial`;
             ctx.fillStyle = labelColor;
             ctx.fillText('NEXT', centerX, curY + labelFont * 0.8);
@@ -1738,7 +1779,10 @@
 
             ctx.fillStyle = boxBg;
             ctx.fillRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
-            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            ctx.strokeStyle = !holdUsed && gameState === 'playing'
+                ? (isWarm ? 'rgba(220, 180, 60, 0.4)' : 'rgba(130, 150, 220, 0.4)')
+                : boxBorder;
+            ctx.lineWidth = !holdUsed && gameState === 'playing' ? 2 : 1;
             ctx.strokeRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
             drawMiniPiece(nextPiece, centerX, curY + boxH / 2, mainBlockSize);
             curY += boxH + 3;
@@ -1754,6 +1798,8 @@
                 ctx.globalAlpha = 1.0;
             }
             curY += smallBoxH + 4;
+            // タップ領域を保存（NEXT ラベル〜NEXT2 ボックス全体）
+            nextBoxRect = { x: centerX - areaW * 0.38, y: nextStartY, w: areaW * 0.76, h: curY - nextStartY };
 
             // 区切りライン
             ctx.strokeStyle = divLineColor; ctx.lineWidth = 1;
@@ -2328,7 +2374,7 @@
             isNewPersonalBest = score > personalBest.score;
             if (isNewPersonalBest) {
                 personalBest = { score, maxCombo, date: new Date().toISOString() };
-                try { localStorage.setItem('personalBest', JSON.stringify(personalBest)); } catch(e) {}
+                try { localStorage.setItem('tamashii_personalBest', JSON.stringify(personalBest)); } catch(e) {}
             }
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
             resizeCanvas();
@@ -2383,7 +2429,7 @@
         function drawPleaseTapScreen() {
             const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2;
             const time = Date.now();
-            const isSmallScreen = H < 600;
+            const isSmallScreen = H < SMALL_SCREEN_THRESHOLD;
 
             // 背景（深い紫黒グラデーション）
             const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -2496,7 +2542,7 @@
          */
         function drawTitleScreen() {
             const W = canvas.width, H = canvas.height, cx = W / 2;
-            const isSmallScreen = H < 600;
+            const isSmallScreen = H < SMALL_SCREEN_THRESHOLD;
 
             // SFC風背景（深い青紫グラデーション）
             const gradient = ctx.createLinearGradient(0, 0, 0, H);
@@ -2698,7 +2744,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.70', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.71', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -2708,13 +2754,12 @@
             try {
                 const audio = new Audio(src);
                 audio.loop = loop;
-                audio.volume = 0.7;
+                audio.volume = BGM_VOLUME;
                 audio.preload = 'auto';
-                audio.addEventListener('canplaythrough', () => console.log(`${label}の読み込み完了`));
-                audio.addEventListener('error', (e) => console.error(`${label}の読み込みに失敗:`, e));
+                audio.addEventListener('error', () => {});
                 return audio;
             } catch (error) {
-                console.error(`${label}の初期化に失敗:`, error);
+                // BGM初期化失敗
                 return null;
             }
         }
@@ -2738,10 +2783,10 @@
                 .then(decoded => {
                     if (decoded) {
                         flashSoundBuffer = decoded;
-                        console.log('全消去SEの読み込み完了（Web Audio API）');
+                        // 全消去SE読み込み完了
                     }
                 })
-                .catch(e => { console.error('全消去SEの読み込みに失敗しました:', e); flashSoundBuffer = null; });
+                .catch(() => { flashSoundBuffer = null; });
         }
 
         let flashSoundSource = null; // 再生中のソースノード
@@ -2781,12 +2826,9 @@
         }
 
         function stopAllBGM() {
-            if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
-            if (spaceBgmAudio && !spaceBgmAudio.paused) { spaceBgmAudio.pause(); spaceBgmAudio.currentTime = 0; }
-            if (titleBgmAudio && !titleBgmAudio.paused) { titleBgmAudio.pause(); titleBgmAudio.currentTime = 0; }
-            if (gameoverBgmAudio && !gameoverBgmAudio.paused) { gameoverBgmAudio.pause(); gameoverBgmAudio.currentTime = 0; }
-            if (highScoreBgmAudio && !highScoreBgmAudio.paused) { highScoreBgmAudio.pause(); highScoreBgmAudio.currentTime = 0; }
-            if (feverBgmAudio && !feverBgmAudio.paused) { feverBgmAudio.pause(); feverBgmAudio.currentTime = 0; }
+            [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio].forEach(a => {
+                if (a && !a.paused) { a.pause(); a.currentTime = 0; }
+            });
             stopFlashSound();
             activeBGM = null;
         }
@@ -2797,20 +2839,23 @@
             return (level >= 10 && spaceBgmAudio) ? spaceBgmAudio : bgmAudio;
         }
 
-        function playBGM() { stopAllBGM(); const bgm = getStageBGM(); currentStageBgm = bgm; activeBGM = bgm; if (bgm) { try { bgm.currentTime = 0; bgm.volume = 0.7; if (!soundMuted) bgm.play().catch(e => {}); } catch (e) {} } }
-        function playTitleBGM() { stopAllBGM(); activeBGM = titleBgmAudio; if (titleBgmAudio) { try { titleBgmAudio.currentTime = 0; titleBgmAudio.volume = 0.7; if (!soundMuted) titleBgmAudio.play().catch(e => {}); } catch (e) {} } }
-        function playGameOverBGM() { stopAllBGM(); if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); activeBGM = gameoverBgmAudio; if (gameoverBgmAudio) { try { gameoverBgmAudio.currentTime = 0; gameoverBgmAudio.volume = 0.7; if (!soundMuted) gameoverBgmAudio.play().catch(e => console.warn('GameOverBGM再生失敗:', e)); } catch (e) {} } }
+        // BGM再生の共通ヘルパー
+        function startBGM(audio) {
+            stopAllBGM();
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            activeBGM = audio;
+            if (audio) { try { audio.currentTime = 0; audio.volume = BGM_VOLUME; if (!soundMuted) audio.play().catch(e => {}); } catch (e) {} }
+        }
+
+        function playBGM() { const bgm = getStageBGM(); currentStageBgm = bgm; startBGM(bgm); }
+        function playTitleBGM() { startBGM(titleBgmAudio); }
+        function playGameOverBGM() { startBGM(gameoverBgmAudio); }
         function playGameOverBGMDelayed() {
             stopAllBGM();
-            // ゲームオーバーSE終了後にBGMを再生（1300ms後）
-            setTimeout(() => {
-                if (gameState === 'gameOver') {
-                    playGameOverBGM();
-                }
-            }, 1300);
+            setTimeout(() => { if (gameState === 'gameOver') playGameOverBGM(); }, GAMEOVER_BGM_DELAY);
         }
-        function playHighScoreBGM() { stopAllBGM(); activeBGM = highScoreBgmAudio; if (highScoreBgmAudio) { try { highScoreBgmAudio.currentTime = 0; highScoreBgmAudio.volume = 0.7; if (!soundMuted) highScoreBgmAudio.play().catch(e => {}); } catch(e) {} } }
-        function playFeverBGM() { stopAllBGM(); activeBGM = feverBgmAudio; if (feverBgmAudio) { try { feverBgmAudio.currentTime = 0; feverBgmAudio.volume = 0.7; if (!soundMuted) feverBgmAudio.play().catch(e => {}); } catch(e) {} } }
+        function playHighScoreBGM() { startBGM(highScoreBgmAudio); }
+        function playFeverBGM() { startBGM(feverBgmAudio); }
 
         function toggleSound() {
             soundMuted = !soundMuted;
@@ -2822,42 +2867,23 @@
             } else {
                 // アンミュート: アクティブなBGMを再開
                 if (activeBGM) {
-                    activeBGM.volume = 0.7;
+                    activeBGM.volume = BGM_VOLUME;
                     activeBGM.play().catch(e => {});
                 }
             }
             saveSettings();
         }
 
-        /**
-         * ヨガ画像を読み込む
-         */
-        function loadYogaImage() {
+        // 画像読み込み共通ヘルパー
+        function loadImageAsset(src, onLoaded) {
             const img = new Image();
-            img.onload = () => { yogaImage = img; if (gameState === 'title') { drawTitleScreen(); } };
-            img.onerror = () => { console.error('ヨガ画像の読み込みに失敗しました'); yogaImage = null; };
-            img.src = 'yoga01.png';
+            img.onload = () => onLoaded(img);
+            img.onerror = () => onLoaded(null);
+            img.src = src;
         }
-
-        /**
-         * ロゴ画像を読み込む
-         */
-        function loadLogoImage() {
-            const img = new Image();
-            img.onload = () => { logoImage = img; };
-            img.onerror = () => { console.error('ロゴ画像の読み込みに失敗しました'); logoImage = null; };
-            img.src = 'logo-white.png';
-        }
-
-        /**
-         * タイトルロゴ画像を読み込む
-         */
-        function loadTitleImage() {
-            const img = new Image();
-            img.onload = () => { titleImage = img; if (gameState === 'title') drawTitleScreen(); };
-            img.onerror = () => { console.error('タイトル画像の読み込みに失敗しました'); titleImage = null; };
-            img.src = 'game-title.png';
-        }
+        function loadYogaImage() { loadImageAsset('yoga01.png', img => { yogaImage = img; if (gameState === 'title') drawTitleScreen(); }); }
+        function loadLogoImage() { loadImageAsset('logo-white.png', img => { logoImage = img; }); }
+        function loadTitleImage() { loadImageAsset('game-title.png', img => { titleImage = img; if (gameState === 'title') drawTitleScreen(); }); }
 
         /**
          * ヨガ行者の画像を描画する
@@ -2951,7 +2977,7 @@
          * ハイスコアボタンを描画する
          */
         function getHighScoreButtonRect() {
-            const isSmallScreen = canvas.height < 600;
+            const isSmallScreen = canvas.height < SMALL_SCREEN_THRESHOLD;
             const buttonWidth = Math.min(canvas.width * 0.35, 280);
             const buttonHeight = Math.min(isSmallScreen ? 38 : 44, canvas.height * 0.06);
             const buttonX = canvas.width / 2 - buttonWidth / 2;
@@ -2960,7 +2986,7 @@
         }
         function drawHighScoreButton() {
             const r = getHighScoreButtonRect();
-            const isSmallScreen = canvas.height < 600;
+            const isSmallScreen = canvas.height < SMALL_SCREEN_THRESHOLD;
             drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'blue', isSmallScreen ? 16 : 18);
         }
 
@@ -3662,7 +3688,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.70', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.71', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -3850,6 +3876,9 @@
                     countdownLastNumber = -1;
                     startScreenTime = Date.now();
                     drawStartScreen();
+                } else if (howToPlayReturnTo === 'paused') {
+                    gameState = 'paused';
+                    drawPauseScreen();
                 } else {
                     gameState = 'settings';
                     drawSettingsScreen();
@@ -4202,10 +4231,11 @@
                     }
 
                     if (pendingAllClear) {
-                        // 全消去ボーナス実行
-                        const allClearBonus = 3000;
+                        // 全消去ボーナス実行（フィーバー中は2倍）
+                        const allClearBase = 3000;
+                        const allClearBonus = isFever ? allClearBase * 2 : allClearBase;
                         score += allClearBonus;
-                        addFloatingText(`ALL CLEAR +${allClearBonus}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
+                        addFloatingText(`ALL CLEAR +${allClearBonus}${isFever ? ' x2!' : ''}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
                         playFlashSound();
                         triggerScreenShake(8, 25);
 
@@ -4417,6 +4447,13 @@
                         // ロックディレイをリセット
                         lockDelayTimer = 0;
                         lockDelayMoveCount = 0;
+                    } else {
+                        // 着地した: ロックディレイを開始して左右移動の猶予を与える
+                        if (lockDelayTimer === 0) {
+                            lockDelayTimer = LOCK_DELAY_FRAMES;
+                            lockDelayMoveCount = 0;
+                        }
+                        stopSoftDrop();
                     }
                     break;
                 case 'hold':
@@ -4550,15 +4587,16 @@
             const btnWidth = Math.min(canvas.width * 0.5, 200);
             const btnHeight = 45;
             const btnX = canvas.width / 2 - btnWidth / 2;
-            const gap = 18;
+            const gap = 14;
             // ウィンドウ中央に合わせる (winY=H*0.2, winH=H*0.55, center=H*0.475)
             const winCenterY = H * 0.475;
-            const totalBtnsH = btnHeight * 3 + gap * 2;
+            const totalBtnsH = btnHeight * 4 + gap * 3;
             const startY = winCenterY - totalBtnsH / 2 + 10;
             return {
-                resume:   { x: btnX, y: startY, w: btnWidth, h: btnHeight },
-                settings: { x: btnX, y: startY + btnHeight + gap, w: btnWidth, h: btnHeight },
-                quit:     { x: btnX, y: startY + (btnHeight + gap) * 2, w: btnWidth, h: btnHeight }
+                resume:    { x: btnX, y: startY, w: btnWidth, h: btnHeight },
+                howToPlay: { x: btnX, y: startY + (btnHeight + gap), w: btnWidth, h: btnHeight },
+                settings:  { x: btnX, y: startY + (btnHeight + gap) * 2, w: btnWidth, h: btnHeight },
+                quit:      { x: btnX, y: startY + (btnHeight + gap) * 3, w: btnWidth, h: btnHeight }
             };
         }
 
@@ -4637,6 +4675,7 @@
                 ctx.lineTo(cx + lineW + 50, pauseTitleY);
                 ctx.stroke();
                 drawSFCButton(btns.resume.x, btns.resume.y, btns.resume.w, btns.resume.h, t('resume'), 'blue');
+                drawSFCButton(btns.howToPlay.x, btns.howToPlay.y, btns.howToPlay.w, btns.howToPlay.h, t('howToPlay'), 'purple');
                 drawSFCButton(btns.settings.x, btns.settings.y, btns.settings.w, btns.settings.h, t('settings'), 'green');
                 drawSFCButton(btns.quit.x, btns.quit.y, btns.quit.w, btns.quit.h, t('returnToTitle'), 'red');
             }
@@ -4664,12 +4703,19 @@
                 const btns = getPauseButtons();
                 const hitResume = x >= btns.resume.x && x <= btns.resume.x + btns.resume.w &&
                                   y >= btns.resume.y && y <= btns.resume.y + btns.resume.h;
+                const hitHowToPlay = x >= btns.howToPlay.x && x <= btns.howToPlay.x + btns.howToPlay.w &&
+                                     y >= btns.howToPlay.y && y <= btns.howToPlay.y + btns.howToPlay.h;
                 const hitSettings = x >= btns.settings.x && x <= btns.settings.x + btns.settings.w &&
                                     y >= btns.settings.y && y <= btns.settings.y + btns.settings.h;
                 const hitQuit = x >= btns.quit.x && x <= btns.quit.x + btns.quit.w &&
                                 y >= btns.quit.y && y <= btns.quit.y + btns.quit.h;
                 if (hitResume) {
                     resumeGame();
+                } else if (hitHowToPlay) {
+                    howToPlayReturnTo = 'paused';
+                    howToPlayShownAt = Date.now();
+                    gameState = 'howToPlay';
+                    drawHowToPlayScreen();
                 } else if (hitSettings) {
                     settingsReturnTo = 'paused';
                     gameState = 'settings';
@@ -4779,6 +4825,20 @@
                 if (gameState === 'playing') {
                     initAudio();
                     const touch = e.touches[0];
+                    const rect = canvas.getBoundingClientRect();
+                    const tx = (touch.clientX - rect.left) * (canvas.width / rect.width);
+                    const ty = (touch.clientY - rect.top) * (canvas.height / rect.height);
+
+                    // サイドパネル（HOLD/NEXT）タップ判定
+                    if (holdBoxRect || nextBoxRect) {
+                        const inHold = holdBoxRect && tx >= holdBoxRect.x && tx <= holdBoxRect.x + holdBoxRect.w && ty >= holdBoxRect.y && ty <= holdBoxRect.y + holdBoxRect.h;
+                        const inNext = nextBoxRect && tx >= nextBoxRect.x && tx <= nextBoxRect.x + nextBoxRect.w && ty >= nextBoxRect.y && ty <= nextBoxRect.y + nextBoxRect.h;
+                        if (inHold || inNext) {
+                            handleTouch('hold');
+                            return;
+                        }
+                    }
+
                     touchStartX = touch.clientX;
                     touchStartY = touch.clientY;
                     touchStartTime = Date.now();

@@ -1,7 +1,8 @@
-const CACHE_NAME = 'tamashii-no-kyoumei-v370';
+const CACHE_NAME = 'tamashii-no-kyoumei-v371';
 const urlsToCache = [
   './',
   './index.html',
+  './manifest.json',
   './yoga01.png',
   './game-title.png',
   './logo-white.png',
