@@ -359,11 +359,11 @@
                 rule1: '左右スワイプ：ブロック移動',
                 rule2: 'タップ：ブロック回転',
                 rule3: '下スワイプ：高速落下',
-                rule4: '同じ色を横一列に繋げるとライン消去',
+                rule4: '横一列を同じ色で埋めるとライン消去',
                 rule5: 'コンボでスコアアップ！',
                 rule6: '5コンボ以上で全消去ボーナス！',
                 rule7: '3コンボでフィーバー突入！',
-                rule8: 'レベルが上がると色が増える！',
+                rule8: 'レベルUPで色が増えて難しくなる！',
                 welcomeMsg: 'はじめに設定と遊び方をご案内します',
                 welcomeTap: 'タップして進む',
                 privacyPolicy: 'プライバシーポリシー',
@@ -392,11 +392,11 @@
                 rule1: 'Swipe left/right: Move block',
                 rule2: 'Tap: Rotate block',
                 rule3: 'Swipe down: Drop block',
-                rule4: 'Connect same colors in a row to clear',
+                rule4: 'Fill a row with one color to clear it',
                 rule5: 'Chain combos for bonus points!',
                 rule6: '5+ combos triggers All Clear bonus!',
                 rule7: '3 combos activates Fever mode!',
-                rule8: 'More colors appear as you level up!',
+                rule8: 'Level up adds more colors & difficulty!',
                 welcomeMsg: 'First, let us set up and show you how to play',
                 welcomeTap: 'Tap to continue',
                 privacyPolicy: 'Privacy Policy',
@@ -942,9 +942,10 @@
         function getAvailableColorCount() {
             const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
             if (level >= 10) return 5; // Lv10+: 5色（全色）
-            if (level >= 5) return 4;  // Lv5-9: 4色
-            if (level <= 1) return 1;  // Lv1: 1色（赤のみ）→ルール体験用
-            return 3;                  // Lv2-4: 3色
+            if (level >= 6) return 4;  // Lv6-9: 4色
+            if (level >= 3) return 3;  // Lv3-5: 3色
+            if (level >= 2) return 2;  // Lv2: 2色
+            return 1;                  // Lv1: 1色（赤のみ）→ルール体験用
         }
 
         function createPiece() {
