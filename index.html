@@ -1087,7 +1087,9 @@
                 if (cellOccupied.has(0 * gridWidth + x) || cellOccupied.has(1 * gridWidth + x)) return 2;
             }
             for (let x = 0; x < gridWidth; x++) {
-                if (cellOccupied.has(2 * gridWidth + x)) return 1;
+                for (let y = 2; y <= 4; y++) {
+                    if (cellOccupied.has(y * gridWidth + x)) return 1;
+                }
             }
             return 0;
         }
@@ -1548,6 +1550,39 @@
          */
         function drawPiece() {
             if (!currentPiece) return;
+
+            // ソフトドロップ中: 速度線エフェクト
+            if (isSoftDropping) {
+                const alpha = 0.15 + Math.sin(frameCount * 0.3) * 0.1;
+                ctx.strokeStyle = `rgba(100, 200, 255, ${alpha})`;
+                ctx.lineWidth = 1;
+                for (let y = 0; y < currentPiece.shape.length; y++) {
+                    for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                        if (currentPiece.shape[y][x]) {
+                            const px = (currentPiece.x + x) * cellSize + cellSize / 2;
+                            const py = (currentPiece.y + y) * cellSize;
+                            // 上方向に伸びる速度線（2本）
+                            const lineLen = cellSize * (1.5 + Math.random() * 1.5);
+                            ctx.globalAlpha = alpha;
+                            ctx.beginPath();
+                            ctx.moveTo(px - cellSize * 0.2, py);
+                            ctx.lineTo(px - cellSize * 0.2, py - lineLen);
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.moveTo(px + cellSize * 0.2, py);
+                            ctx.lineTo(px + cellSize * 0.2, py - lineLen);
+                            ctx.stroke();
+                            ctx.globalAlpha = 1.0;
+                        }
+                    }
+                }
+            }
+
+            // ソフトドロップ中: ピースにグロー効果
+            if (isSoftDropping) {
+                ctx.shadowColor = 'rgba(100, 200, 255, 0.6)';
+                ctx.shadowBlur = 8;
+            }
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
@@ -1559,6 +1594,10 @@
                         );
                     }
                 }
+            }
+            if (isSoftDropping) {
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
             }
         }
 
@@ -3857,6 +3896,9 @@
                     countdownLastNumber = -1;
                     startScreenTime = Date.now();
                     drawStartScreen();
+                } else if (howToPlayReturnTo === 'paused') {
+                    gameState = 'paused';
+                    drawPauseScreen();
                 } else {
                     gameState = 'settings';
                     drawSettingsScreen();
@@ -4209,10 +4251,11 @@
                     }
 
                     if (pendingAllClear) {
-                        // 全消去ボーナス実行
-                        const allClearBonus = 3000;
+                        // 全消去ボーナス実行（フィーバー中は2倍）
+                        const allClearBase = 3000;
+                        const allClearBonus = isFever ? allClearBase * 2 : allClearBase;
                         score += allClearBonus;
-                        addFloatingText(`ALL CLEAR +${allClearBonus}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
+                        addFloatingText(`ALL CLEAR +${allClearBonus}${isFever ? ' x2!' : ''}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
                         playFlashSound();
                         triggerScreenShake(8, 25);
 
@@ -4564,15 +4607,16 @@
             const btnWidth = Math.min(canvas.width * 0.5, 200);
             const btnHeight = 45;
             const btnX = canvas.width / 2 - btnWidth / 2;
-            const gap = 18;
+            const gap = 14;
             // ウィンドウ中央に合わせる (winY=H*0.2, winH=H*0.55, center=H*0.475)
             const winCenterY = H * 0.475;
-            const totalBtnsH = btnHeight * 3 + gap * 2;
+            const totalBtnsH = btnHeight * 4 + gap * 3;
             const startY = winCenterY - totalBtnsH / 2 + 10;
             return {
-                resume:   { x: btnX, y: startY, w: btnWidth, h: btnHeight },
-                settings: { x: btnX, y: startY + btnHeight + gap, w: btnWidth, h: btnHeight },
-                quit:     { x: btnX, y: startY + (btnHeight + gap) * 2, w: btnWidth, h: btnHeight }
+                resume:    { x: btnX, y: startY, w: btnWidth, h: btnHeight },
+                howToPlay: { x: btnX, y: startY + (btnHeight + gap), w: btnWidth, h: btnHeight },
+                settings:  { x: btnX, y: startY + (btnHeight + gap) * 2, w: btnWidth, h: btnHeight },
+                quit:      { x: btnX, y: startY + (btnHeight + gap) * 3, w: btnWidth, h: btnHeight }
             };
         }
 
@@ -4651,6 +4695,7 @@
                 ctx.lineTo(cx + lineW + 50, pauseTitleY);
                 ctx.stroke();
                 drawSFCButton(btns.resume.x, btns.resume.y, btns.resume.w, btns.resume.h, t('resume'), 'blue');
+                drawSFCButton(btns.howToPlay.x, btns.howToPlay.y, btns.howToPlay.w, btns.howToPlay.h, t('howToPlay'), 'purple');
                 drawSFCButton(btns.settings.x, btns.settings.y, btns.settings.w, btns.settings.h, t('settings'), 'green');
                 drawSFCButton(btns.quit.x, btns.quit.y, btns.quit.w, btns.quit.h, t('returnToTitle'), 'red');
             }
@@ -4678,12 +4723,19 @@
                 const btns = getPauseButtons();
                 const hitResume = x >= btns.resume.x && x <= btns.resume.x + btns.resume.w &&
                                   y >= btns.resume.y && y <= btns.resume.y + btns.resume.h;
+                const hitHowToPlay = x >= btns.howToPlay.x && x <= btns.howToPlay.x + btns.howToPlay.w &&
+                                     y >= btns.howToPlay.y && y <= btns.howToPlay.y + btns.howToPlay.h;
                 const hitSettings = x >= btns.settings.x && x <= btns.settings.x + btns.settings.w &&
                                     y >= btns.settings.y && y <= btns.settings.y + btns.settings.h;
                 const hitQuit = x >= btns.quit.x && x <= btns.quit.x + btns.quit.w &&
                                 y >= btns.quit.y && y <= btns.quit.y + btns.quit.h;
                 if (hitResume) {
                     resumeGame();
+                } else if (hitHowToPlay) {
+                    howToPlayReturnTo = 'paused';
+                    howToPlayShownAt = Date.now();
+                    gameState = 'howToPlay';
+                    drawHowToPlayScreen();
                 } else if (hitSettings) {
                     settingsReturnTo = 'paused';
                     gameState = 'settings';
