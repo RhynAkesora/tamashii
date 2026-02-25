@@ -279,6 +279,9 @@
         let sandParticles = [];
         let currentPiece;
         let nextPiece;
+        let nextPiece2;
+        let holdPiece = null;
+        let holdUsed = false; // 1ターンに1回だけホールド可能
         let score = 0;
         let gameLoop;
         let frameCount = 0;
@@ -363,6 +366,7 @@
                 rule1: '左右スワイプ：ブロック移動',
                 rule2: '左タップ：左回転 / 右タップ：右回転',
                 rule3: '下スワイプ：高速落下',
+                rule3b: '上スワイプ：ホールド（ピース保存）',
                 rule4: '横一列を同じ色で埋めるとライン消去',
                 rule5: 'コンボでスコアアップ！',
                 rule6: '5コンボ以上で全消去ボーナス！',
@@ -396,6 +400,7 @@
                 rule1: 'Swipe left/right: Move block',
                 rule2: 'Left tap: Rotate left / Right tap: Rotate right',
                 rule3: 'Swipe down: Drop block',
+                rule3b: 'Swipe up: Hold (save piece)',
                 rule4: 'Fill a row with one color to clear it',
                 rule5: 'Chain combos for bonus points!',
                 rule6: '5+ combos triggers All Clear bonus!',
@@ -1550,7 +1555,7 @@
          */
         function drawGhostPiece() {
             if (!currentPiece) return;
-            // 着地Y座標を求める（currentPiece.yを変更せずに計算）
+            // 着地Y座標を求める
             let ghostY = currentPiece.y;
             if (!cellOccupied) rebuildCellOccupied();
             outer:
@@ -1568,171 +1573,207 @@
                 ghostY = testY;
             }
 
-            if (ghostY === currentPiece.y) return; // 真下が着地点なら表示不要
+            if (ghostY === currentPiece.y) return;
 
-            ctx.globalAlpha = 0.25;
+            // パルスアニメーション（ゆっくり明滅）
+            const pulse = Math.sin(frameCount * 0.08) * 0.08 + 0.22;
+            const outlinePulse = Math.sin(frameCount * 0.08) * 0.15 + 0.55;
+
+            ctx.globalAlpha = pulse;
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
                         const px = (currentPiece.x + x) * cellSize;
                         const py = (ghostY + y) * cellSize;
                         drawBlock3D(px, py, cellSize, colors[currentPiece.color]);
-                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(px, py, cellSize - 1, cellSize - 1);
                     }
                 }
             }
             ctx.globalAlpha = 1.0;
+
+            // 輪郭線（パルスで明滅）
+            for (let y = 0; y < currentPiece.shape.length; y++) {
+                for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                    if (currentPiece.shape[y][x]) {
+                        const px = (currentPiece.x + x) * cellSize;
+                        const py = (ghostY + y) * cellSize;
+                        ctx.strokeStyle = `rgba(255, 255, 255, ${outlinePulse})`;
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeRect(px + 0.5, py + 0.5, cellSize - 1, cellSize - 1);
+                    }
+                }
+            }
         }
 
         /**
-         * 次のピースを描画する
+         * サイドパネルにミニピースを描画するヘルパー
+         */
+        function drawMiniPiece(piece, cx, cy, blockSize) {
+            if (!piece) return;
+            const cols = piece.shape[0].length;
+            const rows = piece.shape.length;
+            const ox = cx - (cols * blockSize) / 2;
+            const oy = cy - (rows * blockSize) / 2;
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (piece.shape[y][x]) {
+                        drawBlock3D(ox + x * blockSize, oy + y * blockSize, blockSize, colors[piece.color]);
+                    }
+                }
+            }
+        }
+
+        /**
+         * サイドパネル（HOLD / NEXT / NEXT2 / ステータス / ヨガ行者）を描画する
          */
         function drawNextPiece() {
             if (!nextPiece) return;
             const gameAreaWidth = cellSize * gridWidth;
-            const nextPieceAreaWidth = canvas.width - gameAreaWidth;
-            const centerX = gameAreaWidth + nextPieceAreaWidth / 2;
-            const nextPieceSize = Math.min(cellSize * 0.6, (nextPieceAreaWidth - NEXT_PIECE_PADDING * 2) / 4);
-            const nextPieceX = gameAreaWidth + (nextPieceAreaWidth - nextPieceSize * 4) / 2;
-            const nextPieceY = NEXT_PIECE_PADDING + 18;
-
-            // --- SFC風NEXTエリア装飾 ---
-            const nPad = Math.floor(4 * Math.min(nextPieceAreaWidth / 80, 1));
-            const nX = gameAreaWidth + nPad;
-            const nW = nextPieceAreaWidth - nPad * 2;
-            const nH = canvas.height - nPad * 2;
+            const areaW = canvas.width - gameAreaWidth;
+            const centerX = gameAreaWidth + areaW / 2;
             const theme = getCurrentBgTheme();
+            const isWarm = (theme === bgThemes[0] || theme === bgThemes[1]);
 
-            // テーマに合わせた半透明オーバーレイ（背景が透けて見える）
+            // --- SFC風パネル背景 & 枠 ---
+            const nPad = Math.floor(4 * Math.min(areaW / 80, 1));
+            const nX = gameAreaWidth + nPad;
+            const nW = areaW - nPad * 2;
+            const nH = canvas.height - nPad * 2;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
             ctx.fillRect(nX, nPad, nW, nH);
-
-            // テーマ別の枠線色
-            const isWarm = (theme === bgThemes[0] || theme === bgThemes[1]); // 砂漠/夕焼け
             const frameColor = isWarm ? 'rgba(180, 150, 80, 0.7)' : 'rgba(85, 102, 170, 0.7)';
             const innerFrameColor = isWarm ? 'rgba(200, 170, 100, 0.3)' : 'rgba(130, 150, 220, 0.3)';
-
-            // 外枠: 2重ボーダー
-            ctx.strokeStyle = frameColor;
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = frameColor; ctx.lineWidth = 2;
             ctx.strokeRect(nX, nPad, nW, nH);
-            ctx.strokeStyle = innerFrameColor;
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = innerFrameColor; ctx.lineWidth = 1;
             ctx.strokeRect(nX + 3, nPad + 3, nW - 6, nH - 6);
+            // コーナー飾り
+            const cornerLen = Math.floor(8 * Math.min(areaW / 80, 1));
+            ctx.strokeStyle = '#c0a040'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(nX, nPad + cornerLen); ctx.lineTo(nX, nPad); ctx.lineTo(nX + cornerLen, nPad); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(nX + nW - cornerLen, nPad); ctx.lineTo(nX + nW, nPad); ctx.lineTo(nX + nW, nPad + cornerLen); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(nX, nPad + nH - cornerLen); ctx.lineTo(nX, nPad + nH); ctx.lineTo(nX + cornerLen, nPad + nH); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(nX + nW - cornerLen, nPad + nH); ctx.lineTo(nX + nW, nPad + nH); ctx.lineTo(nX + nW, nPad + nH - cornerLen); ctx.stroke();
 
-            // コーナー飾り（四隅に金色のL字）
-            const cornerLen = Math.floor(8 * Math.min(nextPieceAreaWidth / 80, 1));
-            ctx.strokeStyle = '#c0a040';
-            ctx.lineWidth = 2;
-            // 左上
-            ctx.beginPath();
-            ctx.moveTo(nX, nPad + cornerLen); ctx.lineTo(nX, nPad); ctx.lineTo(nX + cornerLen, nPad);
-            ctx.stroke();
-            // 右上
-            ctx.beginPath();
-            ctx.moveTo(nX + nW - cornerLen, nPad); ctx.lineTo(nX + nW, nPad); ctx.lineTo(nX + nW, nPad + cornerLen);
-            ctx.stroke();
-            // 左下
-            ctx.beginPath();
-            ctx.moveTo(nX, nPad + nH - cornerLen); ctx.lineTo(nX, nPad + nH); ctx.lineTo(nX + cornerLen, nPad + nH);
-            ctx.stroke();
-            // 右下
-            ctx.beginPath();
-            ctx.moveTo(nX + nW - cornerLen, nPad + nH); ctx.lineTo(nX + nW, nPad + nH); ctx.lineTo(nX + nW, nPad + nH - cornerLen);
-            ctx.stroke();
-
-            // NEXTラベル（テーマ対応装飾文字）
-            const labelFont = Math.max(12, nextPieceAreaWidth * 0.16);
-            ctx.font = `bold ${labelFont}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.fillStyle = isWarm ? '#c0a040' : '#8899cc';
-            ctx.fillText(NEXT_PIECE_LABEL, centerX, NEXT_PIECE_PADDING + 14);
-
-            // NEXTピース背景（テーマ対応）
-            ctx.fillStyle = isWarm ? 'rgba(40, 25, 10, 0.5)' : 'rgba(20, 20, 60, 0.5)';
-            ctx.fillRect(nextPieceX - 2, nextPieceY - 2, nextPieceSize * 4 + 4, nextPieceSize * 4 + 4);
-            ctx.strokeStyle = isWarm ? 'rgba(180, 140, 60, 0.3)' : 'rgba(100, 100, 180, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(nextPieceX - 2, nextPieceY - 2, nextPieceSize * 4 + 4, nextPieceSize * 4 + 4);
-
-            // NEXTピース描画（SFC風立体）
-            for (let y = 0; y < nextPiece.shape.length; y++) {
-                for (let x = 0; x < nextPiece.shape[y].length; x++) {
-                    if (nextPiece.shape[y][x]) {
-                        drawBlock3D(
-                            nextPieceX + (x + (4 - nextPiece.shape[y].length) / 2) * nextPieceSize,
-                            nextPieceY + (y + (4 - nextPiece.shape.length) / 2) * nextPieceSize,
-                            nextPieceSize,
-                            colors[nextPiece.color]
-                        );
-                    }
-                }
-            }
-
-            // --- NEXTピースの下: 消去ライン数 & コンボ & レベル ---
-            const infoY = nextPieceY + nextPieceSize * 4 + 20;
-            const infoFontSmall = Math.max(10, nextPieceAreaWidth * 0.12);
-            const infoFontLarge = Math.max(16, nextPieceAreaWidth * 0.22);
-            const infoLineH = Math.max(20, nextPieceAreaWidth * 0.2);
-            const divLineX1 = gameAreaWidth + nPad + 8;
-            const divLineX2 = gameAreaWidth + nextPieceAreaWidth - nPad - 8;
-            const divLineColor = isWarm ? 'rgba(180, 160, 80, 0.35)' : 'rgba(100, 120, 200, 0.3)';
+            // --- 共通スタイル ---
+            const labelFont = Math.max(9, areaW * 0.13);
             const labelColor = isWarm ? '#c0a040' : '#8899cc';
+            const boxBg = isWarm ? 'rgba(40, 25, 10, 0.5)' : 'rgba(20, 20, 60, 0.5)';
+            const boxBorder = isWarm ? 'rgba(180, 140, 60, 0.3)' : 'rgba(100, 100, 180, 0.3)';
+            const divLineX1 = gameAreaWidth + nPad + 8;
+            const divLineX2 = gameAreaWidth + areaW - nPad - 8;
+            const divLineColor = isWarm ? 'rgba(180, 160, 80, 0.35)' : 'rgba(100, 120, 200, 0.3)';
             ctx.textAlign = 'center';
 
-            // 区切りライン（NEXTピース下）
-            ctx.strokeStyle = divLineColor;
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(divLineX1, infoY - 8); ctx.lineTo(divLineX2, infoY - 8); ctx.stroke();
+            // ピースブロックサイズ
+            const mainBlockSize = Math.min(cellSize * 0.5, (areaW - NEXT_PIECE_PADDING * 2) / 5);
+            const smallBlockSize = mainBlockSize * 0.7;
+            const boxH = mainBlockSize * 3.5;
+            const smallBoxH = smallBlockSize * 3;
+
+            let curY = nPad + 8;
+
+            // ===== HOLD =====
+            ctx.font = `bold ${labelFont}px Arial`;
+            ctx.fillStyle = holdUsed ? 'rgba(128,128,128,0.5)' : labelColor;
+            ctx.fillText('HOLD', centerX, curY + labelFont * 0.8);
+            curY += labelFont + 4;
+
+            ctx.fillStyle = boxBg;
+            ctx.fillRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            ctx.strokeRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+
+            if (holdPiece) {
+                ctx.globalAlpha = holdUsed ? 0.35 : 1.0;
+                drawMiniPiece(holdPiece, centerX, curY + boxH / 2, mainBlockSize);
+                ctx.globalAlpha = 1.0;
+            }
+            curY += boxH + 4;
+
+            // 区切りライン
+            ctx.strokeStyle = divLineColor; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 4;
+
+            // ===== NEXT 1 =====
+            ctx.font = `bold ${labelFont}px Arial`;
+            ctx.fillStyle = labelColor;
+            ctx.fillText('NEXT', centerX, curY + labelFont * 0.8);
+            curY += labelFont + 4;
+
+            ctx.fillStyle = boxBg;
+            ctx.fillRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            ctx.strokeRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            drawMiniPiece(nextPiece, centerX, curY + boxH / 2, mainBlockSize);
+            curY += boxH + 3;
+
+            // ===== NEXT 2（小さめ） =====
+            ctx.fillStyle = boxBg;
+            ctx.fillRect(centerX - areaW * 0.3, curY, areaW * 0.6, smallBoxH);
+            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            ctx.strokeRect(centerX - areaW * 0.3, curY, areaW * 0.6, smallBoxH);
+            if (nextPiece2) {
+                ctx.globalAlpha = 0.7;
+                drawMiniPiece(nextPiece2, centerX, curY + smallBoxH / 2, smallBlockSize);
+                ctx.globalAlpha = 1.0;
+            }
+            curY += smallBoxH + 4;
+
+            // 区切りライン
+            ctx.strokeStyle = divLineColor; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 6;
+
+            // ===== LINES / COMBO / LEVEL =====
+            const infoFontSmall = Math.max(9, areaW * 0.11);
+            const infoFontLarge = Math.max(14, areaW * 0.2);
+            const infoLineH = Math.max(16, areaW * 0.17);
 
             // LINES
             ctx.fillStyle = labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText('LINES', centerX, infoY);
+            ctx.fillText('LINES', centerX, curY + infoFontSmall);
             ctx.fillStyle = '#ffd700';
             ctx.font = `bold ${infoFontLarge}px Arial`;
-            ctx.fillText(`${totalLinesCleared}`, centerX, infoY + infoLineH);
-
-            // 区切りライン
+            ctx.fillText(`${totalLinesCleared}`, centerX, curY + infoFontSmall + infoLineH);
+            curY += infoFontSmall + infoLineH + 4;
             ctx.strokeStyle = divLineColor;
-            ctx.beginPath(); ctx.moveTo(divLineX1, infoY + infoLineH + 6); ctx.lineTo(divLineX2, infoY + infoLineH + 6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 4;
 
             // COMBO
-            const comboY = infoY + infoLineH + 15;
             ctx.fillStyle = isFever ? '#ff00ff' : labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText(isFever ? `FEVER ${Math.ceil(feverTimer / 60)}s` : 'COMBO', centerX, comboY);
+            ctx.fillText(isFever ? `FEVER ${Math.ceil(feverTimer / 60)}s` : 'COMBO', centerX, curY + infoFontSmall);
             if (comboCount > 0) {
                 ctx.fillStyle = isFever ? '#ff00ff' : comboCount >= 4 ? '#ff00ff' : comboCount >= 2 ? '#ff6699' : '#ffd700';
-                ctx.font = `bold ${infoFontLarge}px Arial`;
-                ctx.fillText(`${comboCount}`, centerX, comboY + infoLineH);
             } else {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.font = `bold ${infoFontLarge}px Arial`;
-                ctx.fillText('0', centerX, comboY + infoLineH);
             }
-
-            // 区切りライン
+            ctx.font = `bold ${infoFontLarge}px Arial`;
+            ctx.fillText(`${comboCount}`, centerX, curY + infoFontSmall + infoLineH);
+            curY += infoFontSmall + infoLineH + 4;
             ctx.strokeStyle = divLineColor;
-            ctx.beginPath(); ctx.moveTo(divLineX1, comboY + infoLineH + 6); ctx.lineTo(divLineX2, comboY + infoLineH + 6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 4;
 
             // LEVEL
             const currentLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
-            const levelY = comboY + infoLineH + 15;
             ctx.fillStyle = labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText('LEVEL', centerX, levelY);
+            ctx.fillText('LEVEL', centerX, curY + infoFontSmall);
             ctx.fillStyle = '#88ccff';
             ctx.font = `bold ${infoFontLarge}px Arial`;
-            ctx.fillText(`${currentLevel}`, centerX, levelY + infoLineH);
+            ctx.fillText(`${currentLevel}`, centerX, curY + infoFontSmall + infoLineH);
+            curY += infoFontSmall + infoLineH + 6;
 
-            // --- ヨガ行者（コンボエフェクト付き・シルエットマスク方式） ---
+            // ===== ヨガ行者（コンボエフェクト付き・シルエットマスク方式） =====
             if (yogaImage) {
-                const yogaTopY = levelY + infoLineH + 10;
-                const availableH = canvas.height - yogaTopY - 10;
-                const availableW = nextPieceAreaWidth - 20;
+                const yogaTopY = curY;
+                const availableH = canvas.height - yogaTopY - nPad - 4;
+                const availableW = areaW - 20;
                 if (availableH > 30 && availableW > 30) {
                     const scale = Math.min(availableW / yogaImage.width, availableH / yogaImage.height, 1);
                     const imgW = yogaImage.width * scale;
@@ -1745,7 +1786,6 @@
                     const level = Math.min(yogaGlowLevel, 4);
                     const isGlowing = yogaGlowLevel >= 1 && yogaGlowTimer > 0;
 
-                    // 後光（level 3+）— 円形の radialGradient
                     if (isGlowing && level >= 3) {
                         const haloRadius = Math.max(imgW, imgH) / 2 + 20;
                         const pulse = Math.sin(frameCount * 0.12) * 0.12;
@@ -1764,15 +1804,12 @@
                         ctx.restore();
                     }
 
-                    // ベース画像描画（レベルに応じてalpha上昇）
                     const baseAlphas = [0.25, 0.35, 0.45, 0.55, 0.7];
                     const targetAlpha = isGlowing ? baseAlphas[level] : 0.25;
                     ctx.globalAlpha = targetAlpha;
                     ctx.drawImage(yogaImage, imgX, imgY, imgW, imgH);
                     ctx.globalAlpha = 1.0;
 
-                    // シルエットマスク色オーバーレイ（level 1+）
-                    // オフスクリーンキャンバスで画像のアルファ部分だけに色を乗せる
                     if (isGlowing) {
                         const offW = Math.ceil(imgW);
                         const offH = Math.ceil(imgH);
@@ -1784,21 +1821,16 @@
                             yogaOffCanvas.width = offW;
                             yogaOffCanvas.height = offH;
                         }
-
-                        // オフスクリーンにヨガ画像を描画
                         yogaOffCtx.clearRect(0, 0, offW, offH);
                         yogaOffCtx.globalCompositeOperation = 'source-over';
                         yogaOffCtx.globalAlpha = 1.0;
                         yogaOffCtx.drawImage(yogaImage, 0, 0, offW, offH);
-
-                        // source-atop: 画像の不透明部分にだけ色を乗せる
                         yogaOffCtx.globalCompositeOperation = 'source-atop';
                         const glowColors = ['', '#ff3333', '#ff6600', '#ffcc33', '#ffffff'];
                         yogaOffCtx.fillStyle = glowColors[level];
                         yogaOffCtx.fillRect(0, 0, offW, offH);
                         yogaOffCtx.globalCompositeOperation = 'source-over';
 
-                        // メインキャンバスに加算合成で重ねる
                         const glowAlphas = [0, 0.25, 0.3, 0.35, 0.5];
                         const pulse = Math.sin(frameCount * 0.2) * 0.08;
                         ctx.globalCompositeOperation = 'lighter';
@@ -1886,6 +1918,48 @@
                 currentPiece.shape = previousShape;
                 currentPiece.x = previousX;
             }
+        }
+
+        /**
+         * ホールド: 現在のピースをストックし、ストック済みのピースと交換する
+         */
+        function holdCurrentPiece() {
+            if (!currentPiece || holdUsed) return;
+            holdUsed = true;
+            lockDelayTimer = 0;
+            lockDelayMoveCount = 0;
+
+            // 元のシェイプ（回転前の状態）に戻す
+            const pieceType = pieces.findIndex(p =>
+                p.length === currentPiece.shape.length &&
+                p[0].length === currentPiece.shape[0].length &&
+                p.some((row, y) => row.some((v, x) => v === currentPiece.shape[y][x]))
+            ) >= 0 ? pieces.findIndex(p =>
+                p.length === currentPiece.shape.length &&
+                p[0].length === currentPiece.shape[0].length &&
+                p.some((row, y) => row.some((v, x) => v === currentPiece.shape[y][x]))
+            ) : -1;
+
+            const savedColor = currentPiece.color;
+
+            if (holdPiece) {
+                // ホールド済みのピースと交換
+                const temp = holdPiece;
+                holdPiece = { shape: currentPiece.shape, color: savedColor };
+                currentPiece = {
+                    shape: temp.shape,
+                    color: temp.color,
+                    x: Math.floor(gridWidth / 2) - Math.floor(temp.shape[0].length / 2),
+                    y: 0
+                };
+            } else {
+                // 初回ホールド: 現在のピースを格納し、NEXTキューから補充
+                holdPiece = { shape: currentPiece.shape, color: savedColor };
+                currentPiece = nextPiece;
+                nextPiece = nextPiece2;
+                nextPiece2 = createPiece();
+            }
+            playRotateSound();
         }
 
         /**
@@ -3649,7 +3723,7 @@
 
             // ルール一覧
             const rules = [
-                t('rule1'), t('rule2'), t('rule3'),
+                t('rule1'), t('rule2'), t('rule3'), t('rule3b'),
                 t('rule4'), t('rule8'), t('rule5'), t('rule7'), t('rule6')
             ];
             const ruleStartY = winY + 80;
@@ -3890,6 +3964,9 @@
             comboDisplayElement.style.display = 'none';
             currentPiece = createPiece();
             nextPiece = createPiece();
+            nextPiece2 = createPiece();
+            holdPiece = null;
+            holdUsed = false;
             fallSpeed = 30;
             gameStartTime = Date.now();
             gameState = 'playing';
@@ -4099,7 +4176,9 @@
                         isClearing = false;
                         comboCount = 0;
                         currentPiece = nextPiece;
-                        nextPiece = createPiece();
+                        nextPiece = nextPiece2;
+                        nextPiece2 = createPiece();
+                        holdUsed = false;
                     }
                 }
             } else if (currentPiece) {
@@ -4257,6 +4336,9 @@
                     }
                     mergePiece();
                     isSettling = true;
+                    break;
+                case 'hold':
+                    holdCurrentPiece();
                     break;
             }
         }
@@ -4617,6 +4699,10 @@
                 }
                 if (deltaY > swipeV) {
                     handleTouch('drop');
+                    isTouchHolding = false;
+                }
+                if (deltaY < -swipeV) {
+                    handleTouch('hold');
                     isTouchHolding = false;
                 }
             }, { passive: false });
