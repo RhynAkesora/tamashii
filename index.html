@@ -943,7 +943,8 @@
             const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
             if (level >= 10) return 5; // Lv10+: 5色（全色）
             if (level >= 5) return 4;  // Lv5-9: 4色
-            return 3;                  // Lv1-4: 3色
+            if (level <= 1) return 1;  // Lv1: 1色（赤のみ）→ルール体験用
+            return 3;                  // Lv2-4: 3色
         }
 
         function createPiece() {
