@@ -301,6 +301,11 @@
         let touchStartTime = 0;
         let isTouchHolding = false;
         let lastTouchEndTime = 0; // タッチ+クリック二重発火防止用
+        let softDropTimer = null; // ソフトドロップ長押しタイマー
+        let softDropInterval = null; // ソフトドロップ繰り返しタイマー
+        let isSoftDropping = false; // ソフトドロップ中フラグ
+        const SOFT_DROP_DELAY = 300; // 長押し判定までの時間(ms)
+        const SOFT_DROP_SPEED = 50; // ソフトドロップの落下間隔(ms)
         let fallSpeed = 30;
         let lockDelayTimer = 0; // ロックディレイ残りフレーム
         let lockDelayMoveCount = 0; // ロックディレイ中の操作回数
@@ -366,7 +371,9 @@
                 rule1: '左右スワイプ：ブロック移動',
                 rule2: '左タップ：左回転 / 右タップ：右回転',
                 rule3: '下スワイプ：高速落下',
-                rule3b: '上スワイプ：ホールド（ピース保存）',
+                rule3b: '上スワイプ：ホールド（今のピースを保管）',
+                rule3b2: '　→ もう一度で保管ピースと交換',
+                rule3c: '長押し：ソフトドロップ（加速落下）',
                 rule4: '横一列を同じ色で埋めるとライン消去',
                 rule5: 'コンボでスコアアップ！',
                 rule6: '5コンボ以上で全消去ボーナス！',
@@ -400,7 +407,9 @@
                 rule1: 'Swipe left/right: Move block',
                 rule2: 'Left tap: Rotate left / Right tap: Rotate right',
                 rule3: 'Swipe down: Drop block',
-                rule3b: 'Swipe up: Hold (save piece)',
+                rule3b: 'Swipe up: Hold (store current piece)',
+                rule3b2: '　→ Swipe up again to swap back',
+                rule3c: 'Long press: Soft drop (accelerate)',
                 rule4: 'Fill a row with one color to clear it',
                 rule5: 'Chain combos for bonus points!',
                 rule6: '5+ combos triggers All Clear bonus!',
@@ -1679,14 +1688,39 @@
             ctx.fillText('HOLD', centerX, curY + labelFont * 0.8);
             curY += labelFont + 4;
 
+            const holdBoxX = centerX - areaW * 0.38;
+            const holdBoxW = areaW * 0.76;
             ctx.fillStyle = boxBg;
-            ctx.fillRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
-            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
-            ctx.strokeRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            ctx.fillRect(holdBoxX, curY, holdBoxW, boxH);
+
+            if (!holdUsed && gameState === 'playing') {
+                // 使用可能時: 明るいボーダー
+                ctx.strokeStyle = isWarm ? 'rgba(220, 180, 60, 0.6)' : 'rgba(130, 150, 220, 0.6)';
+                ctx.lineWidth = 2;
+            } else if (holdUsed) {
+                // 使用済み: 暗いボーダー
+                ctx.strokeStyle = isWarm ? 'rgba(100, 80, 30, 0.3)' : 'rgba(60, 60, 100, 0.3)';
+                ctx.lineWidth = 1;
+            } else {
+                ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            }
+            ctx.strokeRect(holdBoxX, curY, holdBoxW, boxH);
 
             if (holdPiece) {
                 ctx.globalAlpha = holdUsed ? 0.35 : 1.0;
                 drawMiniPiece(holdPiece, centerX, curY + boxH / 2, mainBlockSize);
+                ctx.globalAlpha = 1.0;
+            } else if (gameState === 'playing') {
+                // 空のとき: ↑スワイプのヒントを表示
+                const hintSize = Math.max(10, areaW * 0.1);
+                ctx.globalAlpha = 0.4;
+                ctx.fillStyle = isWarm ? '#c0a040' : '#8899cc';
+                // 上矢印
+                ctx.font = `${hintSize * 1.5}px Arial`;
+                ctx.fillText('↑', centerX, curY + boxH / 2 - hintSize * 0.2);
+                // 補助テキスト
+                ctx.font = `${hintSize * 0.75}px Arial`;
+                ctx.fillText(currentLang === 'ja' ? 'スワイプ' : 'Swipe', centerX, curY + boxH / 2 + hintSize * 0.9);
                 ctx.globalAlpha = 1.0;
             }
             curY += boxH + 4;
@@ -2283,6 +2317,7 @@
          * ゲームオーバー処理
          */
         async function gameOver() {
+            stopSoftDrop();
             gameState = 'gameOver';
             gameOverReady = false;
             rankPosition = 0;
@@ -2663,7 +2698,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.63', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.70', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3627,7 +3662,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.63', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.70', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -3760,7 +3795,7 @@
 
             // ルール一覧
             const rules = [
-                t('rule1'), t('rule2'), t('rule3'), t('rule3b'),
+                t('rule1'), t('rule2'), t('rule3'), t('rule3b'), t('rule3b2'), t('rule3c'),
                 t('rule4'), t('rule8'), t('rule5'), t('rule7'), t('rule6')
             ];
             const ruleStartY = winY + 80;
@@ -4375,9 +4410,43 @@
                     mergePiece();
                     isSettling = true;
                     break;
+                case 'softDrop':
+                    if (canMove(0, 1)) {
+                        currentPiece.y++;
+                        score += 1;
+                        // ロックディレイをリセット
+                        lockDelayTimer = 0;
+                        lockDelayMoveCount = 0;
+                    }
+                    break;
                 case 'hold':
                     holdCurrentPiece();
                     break;
+            }
+        }
+
+        function startSoftDrop() {
+            if (isSoftDropping) return;
+            isSoftDropping = true;
+            handleTouch('softDrop');
+            softDropInterval = setInterval(() => {
+                if (gameState === 'playing' && currentPiece) {
+                    handleTouch('softDrop');
+                } else {
+                    stopSoftDrop();
+                }
+            }, SOFT_DROP_SPEED);
+        }
+
+        function stopSoftDrop() {
+            isSoftDropping = false;
+            if (softDropTimer) {
+                clearTimeout(softDropTimer);
+                softDropTimer = null;
+            }
+            if (softDropInterval) {
+                clearInterval(softDropInterval);
+                softDropInterval = null;
             }
         }
 
@@ -4618,6 +4687,7 @@
          */
         function togglePause() {
             if (gameState === 'playing') {
+                stopSoftDrop();
                 gameState = 'paused';
                 pauseConfirmQuit = false;
                 cancelAnimationFrame(gameLoop);
@@ -4713,6 +4783,13 @@
                     touchStartY = touch.clientY;
                     touchStartTime = Date.now();
                     isTouchHolding = true;
+                    // ソフトドロップ: 長押し判定タイマー開始
+                    stopSoftDrop();
+                    softDropTimer = setTimeout(() => {
+                        if (isTouchHolding && gameState === 'playing') {
+                            startSoftDrop();
+                        }
+                    }, SOFT_DROP_DELAY);
                 }
             }, { passive: false });
 
@@ -4727,21 +4804,27 @@
                     return;
                 }
                 if (gameState !== 'playing' || !isTouchHolding) return;
+                // ソフトドロップ中は指の移動を無視（長押し継続）
+                if (isSoftDropping) return;
                 const touch = e.touches[0];
                 const deltaX = touch.clientX - touchStartX;
                 const deltaY = touch.clientY - touchStartY;
                 const swipeH = Math.min(Math.max(cellSize, 20), 50);
                 const swipeV = Math.min(Math.max(cellSize * 2, 40), 100);
                 if (Math.abs(deltaX) > swipeH) {
+                    // スワイプ検出: ソフトドロップタイマーをキャンセル
+                    stopSoftDrop();
                     handleTouch(deltaX > 0 ? 'right' : 'left');
                     touchStartX = touch.clientX;
                     touchStartY = touch.clientY;
                 }
                 if (deltaY > swipeV) {
+                    stopSoftDrop();
                     handleTouch('drop');
                     isTouchHolding = false;
                 }
                 if (deltaY < -swipeV) {
+                    stopSoftDrop();
                     handleTouch('hold');
                     isTouchHolding = false;
                 }
@@ -4782,11 +4865,14 @@
                 }
 
                 if (gameState === 'playing') {
+                    const wasSoftDropping = isSoftDropping;
+                    stopSoftDrop();
                     const touchEndTime = Date.now();
                     const touchDuration = touchEndTime - touchStartTime;
                     const deltaX = touch.clientX - touchStartX;
                     const deltaY = touch.clientY - touchStartY;
-                    if (touchDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && isTouchHolding) {
+                    // ソフトドロップ中だった場合はタップ回転を発動しない
+                    if (!wasSoftDropping && touchDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && isTouchHolding) {
                         // 画面左半分=左回転、右半分=右回転
                         const halfX = canvas.width / 2;
                         handleTouch(x < halfX ? 'rotateLeft' : 'rotateRight');
