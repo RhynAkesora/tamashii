@@ -371,7 +371,8 @@
                 rule1: '左右スワイプ：ブロック移動',
                 rule2: '左タップ：左回転 / 右タップ：右回転',
                 rule3: '下スワイプ：高速落下',
-                rule3b: '上スワイプ：ホールド（ピース保存）',
+                rule3b: '上スワイプ：ホールド（今のピースを保管）',
+                rule3b2: '　→ もう一度で保管ピースと交換',
                 rule3c: '長押し：ソフトドロップ（加速落下）',
                 rule4: '横一列を同じ色で埋めるとライン消去',
                 rule5: 'コンボでスコアアップ！',
@@ -406,7 +407,8 @@
                 rule1: 'Swipe left/right: Move block',
                 rule2: 'Left tap: Rotate left / Right tap: Rotate right',
                 rule3: 'Swipe down: Drop block',
-                rule3b: 'Swipe up: Hold (save piece)',
+                rule3b: 'Swipe up: Hold (store current piece)',
+                rule3b2: '　→ Swipe up again to swap back',
                 rule3c: 'Long press: Soft drop (accelerate)',
                 rule4: 'Fill a row with one color to clear it',
                 rule5: 'Chain combos for bonus points!',
@@ -1686,14 +1688,39 @@
             ctx.fillText('HOLD', centerX, curY + labelFont * 0.8);
             curY += labelFont + 4;
 
+            const holdBoxX = centerX - areaW * 0.38;
+            const holdBoxW = areaW * 0.76;
             ctx.fillStyle = boxBg;
-            ctx.fillRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
-            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
-            ctx.strokeRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            ctx.fillRect(holdBoxX, curY, holdBoxW, boxH);
+
+            if (!holdUsed && gameState === 'playing') {
+                // 使用可能時: 明るいボーダー
+                ctx.strokeStyle = isWarm ? 'rgba(220, 180, 60, 0.6)' : 'rgba(130, 150, 220, 0.6)';
+                ctx.lineWidth = 2;
+            } else if (holdUsed) {
+                // 使用済み: 暗いボーダー
+                ctx.strokeStyle = isWarm ? 'rgba(100, 80, 30, 0.3)' : 'rgba(60, 60, 100, 0.3)';
+                ctx.lineWidth = 1;
+            } else {
+                ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            }
+            ctx.strokeRect(holdBoxX, curY, holdBoxW, boxH);
 
             if (holdPiece) {
                 ctx.globalAlpha = holdUsed ? 0.35 : 1.0;
                 drawMiniPiece(holdPiece, centerX, curY + boxH / 2, mainBlockSize);
+                ctx.globalAlpha = 1.0;
+            } else if (gameState === 'playing') {
+                // 空のとき: ↑スワイプのヒントを表示
+                const hintSize = Math.max(10, areaW * 0.1);
+                ctx.globalAlpha = 0.4;
+                ctx.fillStyle = isWarm ? '#c0a040' : '#8899cc';
+                // 上矢印
+                ctx.font = `${hintSize * 1.5}px Arial`;
+                ctx.fillText('↑', centerX, curY + boxH / 2 - hintSize * 0.2);
+                // 補助テキスト
+                ctx.font = `${hintSize * 0.75}px Arial`;
+                ctx.fillText(currentLang === 'ja' ? 'スワイプ' : 'Swipe', centerX, curY + boxH / 2 + hintSize * 0.9);
                 ctx.globalAlpha = 1.0;
             }
             curY += boxH + 4;
@@ -3768,7 +3795,7 @@
 
             // ルール一覧
             const rules = [
-                t('rule1'), t('rule2'), t('rule3'), t('rule3b'), t('rule3c'),
+                t('rule1'), t('rule2'), t('rule3'), t('rule3b'), t('rule3b2'), t('rule3c'),
                 t('rule4'), t('rule8'), t('rule5'), t('rule7'), t('rule6')
             ];
             const ruleStartY = winY + 80;
