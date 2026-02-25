@@ -271,12 +271,17 @@
         const NEXT_PIECE_LABEL = 'NEXT';
         const SPEED_INCREASE_RATE = 0.975;
         const SPEED_INCREASE_INTERVAL = 4;
+        const LOCK_DELAY_FRAMES = 30; // 着地後の猶予フレーム数（0.5秒 @60fps）
+        const LOCK_DELAY_MAX_MOVES = 15; // ロックディレイ中の最大操作回数
 
         // ゲーム変数
         let cellSize, sandSize;
         let sandParticles = [];
         let currentPiece;
         let nextPiece;
+        let nextPiece2;
+        let holdPiece = null;
+        let holdUsed = false; // 1ターンに1回だけホールド可能
         let score = 0;
         let gameLoop;
         let frameCount = 0;
@@ -297,6 +302,8 @@
         let isTouchHolding = false;
         let lastTouchEndTime = 0; // タッチ+クリック二重発火防止用
         let fallSpeed = 30;
+        let lockDelayTimer = 0; // ロックディレイ残りフレーム
+        let lockDelayMoveCount = 0; // ロックディレイ中の操作回数
         let totalLinesCleared = 0;
         let gameStartTime = 0;
         let playTimeSeconds = 0;
@@ -357,12 +364,14 @@
                 linesLabel: '消去ライン', comboLabel: 'コンボ', levelLabel: 'レベル',
                 howToPlay: '遊び方', howToPlayTitle: '遊び方', proceed: '進む',
                 rule1: '左右スワイプ：ブロック移動',
-                rule2: 'タップ：ブロック回転',
+                rule2: '左タップ：左回転 / 右タップ：右回転',
                 rule3: '下スワイプ：高速落下',
-                rule4: '同じ色を横一列に繋げるとライン消去',
+                rule3b: '上スワイプ：ホールド（ピース保存）',
+                rule4: '横一列を同じ色で埋めるとライン消去',
                 rule5: 'コンボでスコアアップ！',
                 rule6: '5コンボ以上で全消去ボーナス！',
                 rule7: '3コンボでフィーバー突入！',
+                rule8: 'レベルUPで色が増えて難しくなる！',
                 welcomeMsg: 'はじめに設定と遊び方をご案内します',
                 welcomeTap: 'タップして進む',
                 privacyPolicy: 'プライバシーポリシー',
@@ -370,6 +379,7 @@
                 contact: 'お問い合わせ',
                 personalBest: '自己ベスト',
                 newPersonalBest: '自己ベスト更新！',
+                retry: 'もう一度',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -388,12 +398,14 @@
                 linesLabel: 'Lines', comboLabel: 'Combo', levelLabel: 'Level',
                 howToPlay: 'How to Play', howToPlayTitle: 'How to Play', proceed: 'Next',
                 rule1: 'Swipe left/right: Move block',
-                rule2: 'Tap: Rotate block',
+                rule2: 'Left tap: Rotate left / Right tap: Rotate right',
                 rule3: 'Swipe down: Drop block',
-                rule4: 'Connect same colors in a row to clear',
+                rule3b: 'Swipe up: Hold (save piece)',
+                rule4: 'Fill a row with one color to clear it',
                 rule5: 'Chain combos for bonus points!',
                 rule6: '5+ combos triggers All Clear bonus!',
                 rule7: '3 combos activates Fever mode!',
+                rule8: 'Level up adds more colors & difficulty!',
                 welcomeMsg: 'First, let us set up and show you how to play',
                 welcomeTap: 'Tap to continue',
                 privacyPolicy: 'Privacy Policy',
@@ -401,6 +413,7 @@
                 contact: 'Contact',
                 personalBest: 'Best',
                 newPersonalBest: 'New Personal Best!',
+                retry: 'Retry',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -934,9 +947,19 @@
         /**
          * 新しいパズルピースを作成する
          */
+        // 現在のレベルで使用可能な色数を返す
+        function getAvailableColorCount() {
+            const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+            if (level >= 10) return 5; // Lv10+: 5色（全色）
+            if (level >= 6) return 4;  // Lv6-9: 4色
+            if (level >= 3) return 3;  // Lv3-5: 3色
+            if (level >= 2) return 2;  // Lv2: 2色
+            return 1;                  // Lv1: 1色（赤のみ）→ルール体験用
+        }
+
         function createPiece() {
             const pieceType = Math.floor(Math.random() * pieces.length);
-            const colorIndex = Math.floor(Math.random() * colors.length);
+            const colorIndex = Math.floor(Math.random() * getAvailableColorCount());
             const shape = pieces[pieceType];
             return {
                 shape: shape,
@@ -1532,7 +1555,7 @@
          */
         function drawGhostPiece() {
             if (!currentPiece) return;
-            // 着地Y座標を求める（currentPiece.yを変更せずに計算）
+            // 着地Y座標を求める
             let ghostY = currentPiece.y;
             if (!cellOccupied) rebuildCellOccupied();
             outer:
@@ -1550,171 +1573,207 @@
                 ghostY = testY;
             }
 
-            if (ghostY === currentPiece.y) return; // 真下が着地点なら表示不要
+            if (ghostY === currentPiece.y) return;
 
-            ctx.globalAlpha = 0.25;
+            // パルスアニメーション（ゆっくり明滅）
+            const pulse = Math.sin(frameCount * 0.08) * 0.08 + 0.22;
+            const outlinePulse = Math.sin(frameCount * 0.08) * 0.15 + 0.55;
+
+            ctx.globalAlpha = pulse;
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
                         const px = (currentPiece.x + x) * cellSize;
                         const py = (ghostY + y) * cellSize;
                         drawBlock3D(px, py, cellSize, colors[currentPiece.color]);
-                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(px, py, cellSize - 1, cellSize - 1);
                     }
                 }
             }
             ctx.globalAlpha = 1.0;
+
+            // 輪郭線（パルスで明滅）
+            for (let y = 0; y < currentPiece.shape.length; y++) {
+                for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                    if (currentPiece.shape[y][x]) {
+                        const px = (currentPiece.x + x) * cellSize;
+                        const py = (ghostY + y) * cellSize;
+                        ctx.strokeStyle = `rgba(255, 255, 255, ${outlinePulse})`;
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeRect(px + 0.5, py + 0.5, cellSize - 1, cellSize - 1);
+                    }
+                }
+            }
         }
 
         /**
-         * 次のピースを描画する
+         * サイドパネルにミニピースを描画するヘルパー
+         */
+        function drawMiniPiece(piece, cx, cy, blockSize) {
+            if (!piece) return;
+            const cols = piece.shape[0].length;
+            const rows = piece.shape.length;
+            const ox = cx - (cols * blockSize) / 2;
+            const oy = cy - (rows * blockSize) / 2;
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (piece.shape[y][x]) {
+                        drawBlock3D(ox + x * blockSize, oy + y * blockSize, blockSize, colors[piece.color]);
+                    }
+                }
+            }
+        }
+
+        /**
+         * サイドパネル（HOLD / NEXT / NEXT2 / ステータス / ヨガ行者）を描画する
          */
         function drawNextPiece() {
             if (!nextPiece) return;
             const gameAreaWidth = cellSize * gridWidth;
-            const nextPieceAreaWidth = canvas.width - gameAreaWidth;
-            const centerX = gameAreaWidth + nextPieceAreaWidth / 2;
-            const nextPieceSize = Math.min(cellSize * 0.6, (nextPieceAreaWidth - NEXT_PIECE_PADDING * 2) / 4);
-            const nextPieceX = gameAreaWidth + (nextPieceAreaWidth - nextPieceSize * 4) / 2;
-            const nextPieceY = NEXT_PIECE_PADDING + 18;
-
-            // --- SFC風NEXTエリア装飾 ---
-            const nPad = Math.floor(4 * Math.min(nextPieceAreaWidth / 80, 1));
-            const nX = gameAreaWidth + nPad;
-            const nW = nextPieceAreaWidth - nPad * 2;
-            const nH = canvas.height - nPad * 2;
+            const areaW = canvas.width - gameAreaWidth;
+            const centerX = gameAreaWidth + areaW / 2;
             const theme = getCurrentBgTheme();
+            const isWarm = (theme === bgThemes[0] || theme === bgThemes[1]);
 
-            // テーマに合わせた半透明オーバーレイ（背景が透けて見える）
+            // --- SFC風パネル背景 & 枠 ---
+            const nPad = Math.floor(4 * Math.min(areaW / 80, 1));
+            const nX = gameAreaWidth + nPad;
+            const nW = areaW - nPad * 2;
+            const nH = canvas.height - nPad * 2;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
             ctx.fillRect(nX, nPad, nW, nH);
-
-            // テーマ別の枠線色
-            const isWarm = (theme === bgThemes[0] || theme === bgThemes[1]); // 砂漠/夕焼け
             const frameColor = isWarm ? 'rgba(180, 150, 80, 0.7)' : 'rgba(85, 102, 170, 0.7)';
             const innerFrameColor = isWarm ? 'rgba(200, 170, 100, 0.3)' : 'rgba(130, 150, 220, 0.3)';
-
-            // 外枠: 2重ボーダー
-            ctx.strokeStyle = frameColor;
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = frameColor; ctx.lineWidth = 2;
             ctx.strokeRect(nX, nPad, nW, nH);
-            ctx.strokeStyle = innerFrameColor;
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = innerFrameColor; ctx.lineWidth = 1;
             ctx.strokeRect(nX + 3, nPad + 3, nW - 6, nH - 6);
+            // コーナー飾り
+            const cornerLen = Math.floor(8 * Math.min(areaW / 80, 1));
+            ctx.strokeStyle = '#c0a040'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(nX, nPad + cornerLen); ctx.lineTo(nX, nPad); ctx.lineTo(nX + cornerLen, nPad); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(nX + nW - cornerLen, nPad); ctx.lineTo(nX + nW, nPad); ctx.lineTo(nX + nW, nPad + cornerLen); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(nX, nPad + nH - cornerLen); ctx.lineTo(nX, nPad + nH); ctx.lineTo(nX + cornerLen, nPad + nH); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(nX + nW - cornerLen, nPad + nH); ctx.lineTo(nX + nW, nPad + nH); ctx.lineTo(nX + nW, nPad + nH - cornerLen); ctx.stroke();
 
-            // コーナー飾り（四隅に金色のL字）
-            const cornerLen = Math.floor(8 * Math.min(nextPieceAreaWidth / 80, 1));
-            ctx.strokeStyle = '#c0a040';
-            ctx.lineWidth = 2;
-            // 左上
-            ctx.beginPath();
-            ctx.moveTo(nX, nPad + cornerLen); ctx.lineTo(nX, nPad); ctx.lineTo(nX + cornerLen, nPad);
-            ctx.stroke();
-            // 右上
-            ctx.beginPath();
-            ctx.moveTo(nX + nW - cornerLen, nPad); ctx.lineTo(nX + nW, nPad); ctx.lineTo(nX + nW, nPad + cornerLen);
-            ctx.stroke();
-            // 左下
-            ctx.beginPath();
-            ctx.moveTo(nX, nPad + nH - cornerLen); ctx.lineTo(nX, nPad + nH); ctx.lineTo(nX + cornerLen, nPad + nH);
-            ctx.stroke();
-            // 右下
-            ctx.beginPath();
-            ctx.moveTo(nX + nW - cornerLen, nPad + nH); ctx.lineTo(nX + nW, nPad + nH); ctx.lineTo(nX + nW, nPad + nH - cornerLen);
-            ctx.stroke();
-
-            // NEXTラベル（テーマ対応装飾文字）
-            const labelFont = Math.max(12, nextPieceAreaWidth * 0.16);
-            ctx.font = `bold ${labelFont}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.fillStyle = isWarm ? '#c0a040' : '#8899cc';
-            ctx.fillText(NEXT_PIECE_LABEL, centerX, NEXT_PIECE_PADDING + 14);
-
-            // NEXTピース背景（テーマ対応）
-            ctx.fillStyle = isWarm ? 'rgba(40, 25, 10, 0.5)' : 'rgba(20, 20, 60, 0.5)';
-            ctx.fillRect(nextPieceX - 2, nextPieceY - 2, nextPieceSize * 4 + 4, nextPieceSize * 4 + 4);
-            ctx.strokeStyle = isWarm ? 'rgba(180, 140, 60, 0.3)' : 'rgba(100, 100, 180, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(nextPieceX - 2, nextPieceY - 2, nextPieceSize * 4 + 4, nextPieceSize * 4 + 4);
-
-            // NEXTピース描画（SFC風立体）
-            for (let y = 0; y < nextPiece.shape.length; y++) {
-                for (let x = 0; x < nextPiece.shape[y].length; x++) {
-                    if (nextPiece.shape[y][x]) {
-                        drawBlock3D(
-                            nextPieceX + (x + (4 - nextPiece.shape[y].length) / 2) * nextPieceSize,
-                            nextPieceY + (y + (4 - nextPiece.shape.length) / 2) * nextPieceSize,
-                            nextPieceSize,
-                            colors[nextPiece.color]
-                        );
-                    }
-                }
-            }
-
-            // --- NEXTピースの下: 消去ライン数 & コンボ & レベル ---
-            const infoY = nextPieceY + nextPieceSize * 4 + 20;
-            const infoFontSmall = Math.max(10, nextPieceAreaWidth * 0.12);
-            const infoFontLarge = Math.max(16, nextPieceAreaWidth * 0.22);
-            const infoLineH = Math.max(20, nextPieceAreaWidth * 0.2);
-            const divLineX1 = gameAreaWidth + nPad + 8;
-            const divLineX2 = gameAreaWidth + nextPieceAreaWidth - nPad - 8;
-            const divLineColor = isWarm ? 'rgba(180, 160, 80, 0.35)' : 'rgba(100, 120, 200, 0.3)';
+            // --- 共通スタイル ---
+            const labelFont = Math.max(9, areaW * 0.13);
             const labelColor = isWarm ? '#c0a040' : '#8899cc';
+            const boxBg = isWarm ? 'rgba(40, 25, 10, 0.5)' : 'rgba(20, 20, 60, 0.5)';
+            const boxBorder = isWarm ? 'rgba(180, 140, 60, 0.3)' : 'rgba(100, 100, 180, 0.3)';
+            const divLineX1 = gameAreaWidth + nPad + 8;
+            const divLineX2 = gameAreaWidth + areaW - nPad - 8;
+            const divLineColor = isWarm ? 'rgba(180, 160, 80, 0.35)' : 'rgba(100, 120, 200, 0.3)';
             ctx.textAlign = 'center';
 
-            // 区切りライン（NEXTピース下）
-            ctx.strokeStyle = divLineColor;
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(divLineX1, infoY - 8); ctx.lineTo(divLineX2, infoY - 8); ctx.stroke();
+            // ピースブロックサイズ
+            const mainBlockSize = Math.min(cellSize * 0.5, (areaW - NEXT_PIECE_PADDING * 2) / 5);
+            const smallBlockSize = mainBlockSize * 0.7;
+            const boxH = mainBlockSize * 3.5;
+            const smallBoxH = smallBlockSize * 3;
+
+            let curY = nPad + 8;
+
+            // ===== HOLD =====
+            ctx.font = `bold ${labelFont}px Arial`;
+            ctx.fillStyle = holdUsed ? 'rgba(128,128,128,0.5)' : labelColor;
+            ctx.fillText('HOLD', centerX, curY + labelFont * 0.8);
+            curY += labelFont + 4;
+
+            ctx.fillStyle = boxBg;
+            ctx.fillRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            ctx.strokeRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+
+            if (holdPiece) {
+                ctx.globalAlpha = holdUsed ? 0.35 : 1.0;
+                drawMiniPiece(holdPiece, centerX, curY + boxH / 2, mainBlockSize);
+                ctx.globalAlpha = 1.0;
+            }
+            curY += boxH + 4;
+
+            // 区切りライン
+            ctx.strokeStyle = divLineColor; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 4;
+
+            // ===== NEXT 1 =====
+            ctx.font = `bold ${labelFont}px Arial`;
+            ctx.fillStyle = labelColor;
+            ctx.fillText('NEXT', centerX, curY + labelFont * 0.8);
+            curY += labelFont + 4;
+
+            ctx.fillStyle = boxBg;
+            ctx.fillRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            ctx.strokeRect(centerX - areaW * 0.38, curY, areaW * 0.76, boxH);
+            drawMiniPiece(nextPiece, centerX, curY + boxH / 2, mainBlockSize);
+            curY += boxH + 3;
+
+            // ===== NEXT 2（小さめ） =====
+            ctx.fillStyle = boxBg;
+            ctx.fillRect(centerX - areaW * 0.3, curY, areaW * 0.6, smallBoxH);
+            ctx.strokeStyle = boxBorder; ctx.lineWidth = 1;
+            ctx.strokeRect(centerX - areaW * 0.3, curY, areaW * 0.6, smallBoxH);
+            if (nextPiece2) {
+                ctx.globalAlpha = 0.7;
+                drawMiniPiece(nextPiece2, centerX, curY + smallBoxH / 2, smallBlockSize);
+                ctx.globalAlpha = 1.0;
+            }
+            curY += smallBoxH + 4;
+
+            // 区切りライン
+            ctx.strokeStyle = divLineColor; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 6;
+
+            // ===== LINES / COMBO / LEVEL =====
+            const infoFontSmall = Math.max(9, areaW * 0.11);
+            const infoFontLarge = Math.max(14, areaW * 0.2);
+            const infoLineH = Math.max(16, areaW * 0.17);
 
             // LINES
             ctx.fillStyle = labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText('LINES', centerX, infoY);
+            ctx.fillText('LINES', centerX, curY + infoFontSmall);
             ctx.fillStyle = '#ffd700';
             ctx.font = `bold ${infoFontLarge}px Arial`;
-            ctx.fillText(`${totalLinesCleared}`, centerX, infoY + infoLineH);
-
-            // 区切りライン
+            ctx.fillText(`${totalLinesCleared}`, centerX, curY + infoFontSmall + infoLineH);
+            curY += infoFontSmall + infoLineH + 4;
             ctx.strokeStyle = divLineColor;
-            ctx.beginPath(); ctx.moveTo(divLineX1, infoY + infoLineH + 6); ctx.lineTo(divLineX2, infoY + infoLineH + 6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 4;
 
             // COMBO
-            const comboY = infoY + infoLineH + 15;
             ctx.fillStyle = isFever ? '#ff00ff' : labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText(isFever ? `FEVER ${Math.ceil(feverTimer / 60)}s` : 'COMBO', centerX, comboY);
+            ctx.fillText(isFever ? `FEVER ${Math.ceil(feverTimer / 60)}s` : 'COMBO', centerX, curY + infoFontSmall);
             if (comboCount > 0) {
                 ctx.fillStyle = isFever ? '#ff00ff' : comboCount >= 4 ? '#ff00ff' : comboCount >= 2 ? '#ff6699' : '#ffd700';
-                ctx.font = `bold ${infoFontLarge}px Arial`;
-                ctx.fillText(`${comboCount}`, centerX, comboY + infoLineH);
             } else {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.font = `bold ${infoFontLarge}px Arial`;
-                ctx.fillText('0', centerX, comboY + infoLineH);
             }
-
-            // 区切りライン
+            ctx.font = `bold ${infoFontLarge}px Arial`;
+            ctx.fillText(`${comboCount}`, centerX, curY + infoFontSmall + infoLineH);
+            curY += infoFontSmall + infoLineH + 4;
             ctx.strokeStyle = divLineColor;
-            ctx.beginPath(); ctx.moveTo(divLineX1, comboY + infoLineH + 6); ctx.lineTo(divLineX2, comboY + infoLineH + 6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
+            curY += 4;
 
             // LEVEL
             const currentLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
-            const levelY = comboY + infoLineH + 15;
             ctx.fillStyle = labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText('LEVEL', centerX, levelY);
+            ctx.fillText('LEVEL', centerX, curY + infoFontSmall);
             ctx.fillStyle = '#88ccff';
             ctx.font = `bold ${infoFontLarge}px Arial`;
-            ctx.fillText(`${currentLevel}`, centerX, levelY + infoLineH);
+            ctx.fillText(`${currentLevel}`, centerX, curY + infoFontSmall + infoLineH);
+            curY += infoFontSmall + infoLineH + 6;
 
-            // --- ヨガ行者（コンボエフェクト付き・シルエットマスク方式） ---
+            // ===== ヨガ行者（コンボエフェクト付き・シルエットマスク方式） =====
             if (yogaImage) {
-                const yogaTopY = levelY + infoLineH + 10;
-                const availableH = canvas.height - yogaTopY - 10;
-                const availableW = nextPieceAreaWidth - 20;
+                const yogaTopY = curY;
+                const availableH = canvas.height - yogaTopY - nPad - 4;
+                const availableW = areaW - 20;
                 if (availableH > 30 && availableW > 30) {
                     const scale = Math.min(availableW / yogaImage.width, availableH / yogaImage.height, 1);
                     const imgW = yogaImage.width * scale;
@@ -1727,7 +1786,6 @@
                     const level = Math.min(yogaGlowLevel, 4);
                     const isGlowing = yogaGlowLevel >= 1 && yogaGlowTimer > 0;
 
-                    // 後光（level 3+）— 円形の radialGradient
                     if (isGlowing && level >= 3) {
                         const haloRadius = Math.max(imgW, imgH) / 2 + 20;
                         const pulse = Math.sin(frameCount * 0.12) * 0.12;
@@ -1746,15 +1804,12 @@
                         ctx.restore();
                     }
 
-                    // ベース画像描画（レベルに応じてalpha上昇）
                     const baseAlphas = [0.25, 0.35, 0.45, 0.55, 0.7];
                     const targetAlpha = isGlowing ? baseAlphas[level] : 0.25;
                     ctx.globalAlpha = targetAlpha;
                     ctx.drawImage(yogaImage, imgX, imgY, imgW, imgH);
                     ctx.globalAlpha = 1.0;
 
-                    // シルエットマスク色オーバーレイ（level 1+）
-                    // オフスクリーンキャンバスで画像のアルファ部分だけに色を乗せる
                     if (isGlowing) {
                         const offW = Math.ceil(imgW);
                         const offH = Math.ceil(imgH);
@@ -1766,21 +1821,16 @@
                             yogaOffCanvas.width = offW;
                             yogaOffCanvas.height = offH;
                         }
-
-                        // オフスクリーンにヨガ画像を描画
                         yogaOffCtx.clearRect(0, 0, offW, offH);
                         yogaOffCtx.globalCompositeOperation = 'source-over';
                         yogaOffCtx.globalAlpha = 1.0;
                         yogaOffCtx.drawImage(yogaImage, 0, 0, offW, offH);
-
-                        // source-atop: 画像の不透明部分にだけ色を乗せる
                         yogaOffCtx.globalCompositeOperation = 'source-atop';
                         const glowColors = ['', '#ff3333', '#ff6600', '#ffcc33', '#ffffff'];
                         yogaOffCtx.fillStyle = glowColors[level];
                         yogaOffCtx.fillRect(0, 0, offW, offH);
                         yogaOffCtx.globalCompositeOperation = 'source-over';
 
-                        // メインキャンバスに加算合成で重ねる
                         const glowAlphas = [0, 0.25, 0.3, 0.35, 0.5];
                         const pulse = Math.sin(frameCount * 0.2) * 0.08;
                         ctx.globalCompositeOperation = 'lighter';
@@ -1825,20 +1875,91 @@
         }
 
         /**
-         * ピースを回転させる
+         * ピースを回転させる（direction: 1=右回転(時計回り), -1=左回転(反時計回り)）
          */
-        function rotate() {
+        function rotate(direction) {
             if (!currentPiece) return;
-            const rotated = currentPiece.shape[0].map((_, i) => 
-                currentPiece.shape.map(row => row[i]).reverse()
-            );
-            const previousShape = currentPiece.shape;
-            currentPiece.shape = rotated;
-            if (!canMove(0, 0)) {
-                currentPiece.shape = previousShape;
+            direction = direction || 1;
+            let rotated;
+            if (direction === 1) {
+                // 右回転（時計回り）: 転置して各行反転
+                rotated = currentPiece.shape[0].map((_, i) =>
+                    currentPiece.shape.map(row => row[i]).reverse()
+                );
             } else {
-                playRotateSound();
+                // 左回転（反時計回り）: 各行反転して転置
+                rotated = currentPiece.shape[0].map((_, i) =>
+                    currentPiece.shape.map(row => row[row.length - 1 - i])
+                );
             }
+            const previousShape = currentPiece.shape;
+            const previousX = currentPiece.x;
+            currentPiece.shape = rotated;
+
+            // 壁キック: 回転が無効な場合、左右にずらして再試行
+            const kicks = [0, -1, 1, -2, 2];
+            let success = false;
+            for (const kick of kicks) {
+                currentPiece.x = previousX + kick;
+                if (canMove(0, 0)) {
+                    success = true;
+                    break;
+                }
+            }
+
+            if (success) {
+                // ロックディレイのリセット（着地中に回転成功した場合）
+                if (lockDelayTimer > 0) {
+                    lockDelayTimer = LOCK_DELAY_FRAMES;
+                    lockDelayMoveCount++;
+                }
+                playRotateSound();
+            } else {
+                currentPiece.shape = previousShape;
+                currentPiece.x = previousX;
+            }
+        }
+
+        /**
+         * ホールド: 現在のピースをストックし、ストック済みのピースと交換する
+         */
+        function holdCurrentPiece() {
+            if (!currentPiece || holdUsed) return;
+            holdUsed = true;
+            lockDelayTimer = 0;
+            lockDelayMoveCount = 0;
+
+            // 元のシェイプ（回転前の状態）に戻す
+            const pieceType = pieces.findIndex(p =>
+                p.length === currentPiece.shape.length &&
+                p[0].length === currentPiece.shape[0].length &&
+                p.some((row, y) => row.some((v, x) => v === currentPiece.shape[y][x]))
+            ) >= 0 ? pieces.findIndex(p =>
+                p.length === currentPiece.shape.length &&
+                p[0].length === currentPiece.shape[0].length &&
+                p.some((row, y) => row.some((v, x) => v === currentPiece.shape[y][x]))
+            ) : -1;
+
+            const savedColor = currentPiece.color;
+
+            if (holdPiece) {
+                // ホールド済みのピースと交換
+                const temp = holdPiece;
+                holdPiece = { shape: currentPiece.shape, color: savedColor };
+                currentPiece = {
+                    shape: temp.shape,
+                    color: temp.color,
+                    x: Math.floor(gridWidth / 2) - Math.floor(temp.shape[0].length / 2),
+                    y: 0
+                };
+            } else {
+                // 初回ホールド: 現在のピースを格納し、NEXTキューから補充
+                holdPiece = { shape: currentPiece.shape, color: savedColor };
+                currentPiece = nextPiece;
+                nextPiece = nextPiece2;
+                nextPiece2 = createPiece();
+            }
+            playRotateSound();
         }
 
         /**
@@ -2542,7 +2663,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.62', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.63', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3286,84 +3407,121 @@
             welcomeAnimFrame = requestAnimationFrame(drawWelcomeScreen);
         }
 
+        let countdownLastNumber = -1; // カウントダウン音の重複防止用
+
         /**
-         * START演出画面を描画する
+         * カウントダウンの効果音を鳴らす
+         */
+        function playCountdownSound(num) {
+            if (num === 0) {
+                // GO! — 高い和音風
+                playSound({ frequency: 880, type: 'square', duration: 0.3, volume: 0.3, sweep: 220 });
+            } else {
+                // 3, 2, 1 — 段階的に高くなるビープ
+                const freq = 440 + (4 - num) * 110;
+                playSound({ frequency: freq, type: 'square', duration: 0.12, volume: 0.25 });
+            }
+        }
+
+        /**
+         * カウントダウン演出画面を描画する（3 → 2 → 1 → GO!）
          */
         function drawStartScreen() {
             const W = canvas.width, H = canvas.height;
             const elapsed = Date.now() - startScreenTime;
-            const duration = 2000;
 
-            // 背景
-            const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-            bgGrad.addColorStop(0, '#0a0a1e');
-            bgGrad.addColorStop(1, '#1a1a3e');
-            ctx.fillStyle = bgGrad;
-            ctx.fillRect(0, 0, W, H);
+            // カウントダウン構成: 3(0-800ms), 2(800-1600ms), 1(1600-2400ms), GO!(2400-3200ms)
+            const stepDuration = 800;
+            const totalDuration = stepDuration * 4;
+            const step = Math.min(Math.floor(elapsed / stepDuration), 3);
+            const stepProgress = (elapsed - step * stepDuration) / stepDuration;
+            const labels = ['3', '2', '1', 'GO!'];
+            const stepColors = ['#ff6644', '#ffaa22', '#44cc66', '#44aaff'];
+            const glowColors = ['#ff3300', '#ff8800', '#22aa44', '#2288ff'];
+            const currentLabel = labels[step];
 
-            // 装飾: 星
-            ctx.fillStyle = '#ffffff';
-            for (let i = 0; i < 30; i++) {
-                const sx = ((i * 7919 + 31) % 100) / 100 * W;
-                const sy = ((i * 6271 + 17) % 100) / 100 * H;
-                const twinkle = Math.sin(elapsed * 0.003 + i * 1.7) * 0.3 + 0.7;
-                ctx.globalAlpha = twinkle * 0.5;
-                ctx.fillRect(sx, sy, 1.5, 1.5);
+            // カウントダウン音（各ステップの開始時に1回だけ）
+            if (step !== countdownLastNumber) {
+                countdownLastNumber = step;
+                playCountdownSound(step === 3 ? 0 : 3 - step);
             }
-            ctx.globalAlpha = 1.0;
+
+            // 背景: ゲーム画面をうっすら表示して半透明オーバーレイ
+            drawGrid();
+            if (currentPiece) {
+                drawGhostPiece();
+                drawPiece();
+            }
+            drawNextPiece();
+            drawGameAreaFrame();
+            const gameAreaWidth = cellSize * gridWidth;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(0, 0, gameAreaWidth, H);
 
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            // START文字（拡大しながらフェードイン → フェードアウト）
-            const progress = elapsed / duration;
+            // 数字/GOのアニメーション（ポップイン → 維持 → フェードアウト）
             let alpha, scale;
-            if (progress < 0.3) {
-                // フェードイン + スケールアップ
-                const t = progress / 0.3;
+            if (stepProgress < 0.15) {
+                const t = stepProgress / 0.15;
                 alpha = t;
-                scale = 0.5 + t * 0.5;
-            } else if (progress < 0.7) {
-                // 維持
+                scale = 1.8 - t * 0.8; // 1.8 → 1.0 にシュリンク
+            } else if (stepProgress < 0.7) {
                 alpha = 1;
                 scale = 1.0;
-            } else if (progress < 1.0) {
-                // フェードアウト
-                const t = (progress - 0.7) / 0.3;
-                alpha = 1 - t;
-                scale = 1.0 + t * 0.3;
             } else {
-                alpha = 0;
-                scale = 1.3;
+                const t = (stepProgress - 0.7) / 0.3;
+                alpha = 1 - t;
+                scale = 1.0 - t * 0.3; // 少し縮む
             }
 
             if (alpha > 0) {
                 ctx.globalAlpha = alpha;
                 ctx.save();
-                ctx.translate(W / 2, H * 0.45);
+                ctx.translate(gameAreaWidth / 2, H * 0.42);
                 ctx.scale(scale, scale);
-                const startSize = Math.min(48, W * 0.12);
-                ctx.font = `bold ${startSize}px sans-serif`;
-                ctx.fillStyle = '#ffffff';
-                ctx.shadowColor = '#4080ff';
-                ctx.shadowBlur = 20;
-                ctx.fillText('START', 0, 0);
+
+                const fontSize = step === 3 ? Math.min(56, gameAreaWidth * 0.18) : Math.min(72, gameAreaWidth * 0.22);
+                ctx.font = `bold ${fontSize}px sans-serif`;
+                ctx.fillStyle = stepColors[step];
+                ctx.shadowColor = glowColors[step];
+                ctx.shadowBlur = 25;
+                ctx.fillText(currentLabel, 0, 0);
+                // 2重描画でグロー強化
+                ctx.shadowBlur = 40;
+                ctx.fillText(currentLabel, 0, 0);
                 ctx.shadowBlur = 0;
                 ctx.restore();
                 ctx.globalAlpha = 1.0;
             }
 
+            // 進行バー（画面下部）
+            const barY = H * 0.58;
+            const barW = gameAreaWidth * 0.5;
+            const barH = 4;
+            const barX = (gameAreaWidth - barW) / 2;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.fillRect(barX, barY, barW, barH);
+            const fillRatio = elapsed / totalDuration;
+            ctx.fillStyle = stepColors[step];
+            ctx.globalAlpha = 0.7;
+            ctx.fillRect(barX, barY, barW * fillRatio, barH);
+            ctx.globalAlpha = 1.0;
+
             // 時間経過でゲーム開始
-            if (elapsed >= duration) {
+            if (elapsed >= totalDuration) {
                 if (startScreenAnimFrame) {
                     cancelAnimationFrame(startScreenAnimFrame);
                     startScreenAnimFrame = null;
                 }
+                countdownLastNumber = -1;
                 gameState = 'playing';
                 scoreDisplayElement.style.display = 'flex';
                 if (pauseButtonElement) pauseButtonElement.style.display = 'block';
                 resizeCanvas();
                 updateScoreDisplay();
+                gameStartTime = Date.now(); // カウントダウン後にプレイ時間計測開始
                 update();
                 return;
             }
@@ -3469,7 +3627,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.62', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.63', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -3602,8 +3760,8 @@
 
             // ルール一覧
             const rules = [
-                t('rule1'), t('rule2'), t('rule3'),
-                t('rule4'), t('rule5'), t('rule7'), t('rule6')
+                t('rule1'), t('rule2'), t('rule3'), t('rule3b'),
+                t('rule4'), t('rule8'), t('rule5'), t('rule7'), t('rule6')
             ];
             const ruleStartY = winY + 80;
             const ruleLineH = Math.min(42, (H * 0.45) / rules.length);
@@ -3654,6 +3812,7 @@
             if (hitBack) {
                 if (howToPlayReturnTo === 'playing') {
                     gameState = 'startScreen';
+                    countdownLastNumber = -1;
                     startScreenTime = Date.now();
                     drawStartScreen();
                 } else {
@@ -3700,8 +3859,8 @@
 
             // SFC風ウィンドウ枠
             const winMargin = Math.max(16, W * 0.06);
-            const winX = winMargin, winY = H * 0.12;
-            const winW = W - winMargin * 2, winH = H * 0.72;
+            const winX = winMargin, winY = H * 0.08;
+            const winW = W - winMargin * 2, winH = H * 0.82;
             drawSFCWindow(winX, winY, winW, winH, 'red');
 
             const baseY = winY + winH * 0.12;
@@ -3787,14 +3946,25 @@
                 ctx.fillText(stats[i].value, cx + 10, y);
             }
 
-            // タイトルに戻るボタン（SFC風）
+            // ボタン群（SFC風）
             if (gameOverReady) {
-                const btnW = Math.min(W * 0.55, 220);
-                const btnH = 44;
-                const btnX = cx - btnW / 2;
-                const btnY = statY + stats.length * lineH + 20;
-                drawSFCButton(btnX, btnY, btnW, btnH, t('returnToTitle'), 'blue');
+                const btns = getGameOverButtons(statY + stats.length * lineH + 20, W, cx);
+                drawSFCButton(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h, t('retry'), 'red');
+                drawSFCButton(btns.title.x, btns.title.y, btns.title.w, btns.title.h, t('returnToTitle'), 'blue');
             }
+        }
+
+        /**
+         * ゲームオーバー画面のボタン位置を計算する
+         */
+        function getGameOverButtons(topY, W, cx) {
+            const btnW = Math.min(W * 0.55, 220);
+            const btnH = 44;
+            const gap = 14;
+            return {
+                retry: { x: cx - btnW / 2, y: topY, w: btnW, h: btnH },
+                title: { x: cx - btnW / 2, y: topY + btnH + gap, w: btnW, h: btnH },
+            };
         }
 
         /**
@@ -3811,6 +3981,8 @@
             isNewPersonalBest = false;
             totalLinesCleared = 0;
             isSettling = false;
+            lockDelayTimer = 0;
+            lockDelayMoveCount = 0;
             isClearing = false;
             isFlashing = false;
             flashTimer = 0;
@@ -3830,13 +4002,12 @@
             comboDisplayElement.style.display = 'none';
             currentPiece = createPiece();
             nextPiece = createPiece();
+            nextPiece2 = createPiece();
+            holdPiece = null;
+            holdUsed = false;
             fallSpeed = 30;
             gameStartTime = Date.now();
-            gameState = 'playing';
-            scoreDisplayElement.style.display = 'flex';
-            if (pauseButtonElement) pauseButtonElement.style.display = 'block';
             resizeCanvas();
-            updateScoreDisplay();
 
             playBGM();
 
@@ -3850,7 +4021,11 @@
                 return;
             }
 
-            update();
+            // カウントダウン演出を経てゲーム開始
+            gameState = 'startScreen';
+            countdownLastNumber = -1;
+            startScreenTime = Date.now();
+            drawStartScreen();
         }
 
         /**
@@ -4039,16 +4214,43 @@
                         isClearing = false;
                         comboCount = 0;
                         currentPiece = nextPiece;
-                        nextPiece = createPiece();
+                        nextPiece = nextPiece2;
+                        nextPiece2 = createPiece();
+                        holdUsed = false;
                     }
                 }
             } else if (currentPiece) {
                 if (frameCount % Math.floor(fallSpeed) === 0) {
                     if (canMove(0, 1)) {
                         currentPiece.y++;
-                    } else {
+                        // 下に移動できた場合、ロックディレイをリセット
+                        lockDelayTimer = 0;
+                        lockDelayMoveCount = 0;
+                    } else if (lockDelayTimer === 0) {
+                        // 着地した瞬間: ロックディレイ開始
+                        lockDelayTimer = LOCK_DELAY_FRAMES;
+                        lockDelayMoveCount = 0;
+                    }
+                }
+                // ロックディレイのカウントダウン
+                if (lockDelayTimer > 0) {
+                    // 操作回数上限を超えた、または再び下に移動可能になった場合
+                    if (canMove(0, 1)) {
+                        lockDelayTimer = 0;
+                        lockDelayMoveCount = 0;
+                    } else if (lockDelayMoveCount >= LOCK_DELAY_MAX_MOVES) {
+                        lockDelayTimer = 0;
+                        lockDelayMoveCount = 0;
                         mergePiece();
                         isSettling = true;
+                    } else {
+                        lockDelayTimer--;
+                        if (lockDelayTimer <= 0) {
+                            lockDelayTimer = 0;
+                            lockDelayMoveCount = 0;
+                            mergePiece();
+                            isSettling = true;
+                        }
                     }
                 }
             }
@@ -4138,25 +4340,43 @@
                     if (canMove(-1, 0)) {
                         currentPiece.x--;
                         playMoveSound();
+                        // ロックディレイ中の移動でタイマーリセット
+                        if (lockDelayTimer > 0) {
+                            lockDelayTimer = LOCK_DELAY_FRAMES;
+                            lockDelayMoveCount++;
+                        }
                     }
                     break;
                 case 'right':
                     if (canMove(1, 0)) {
                         currentPiece.x++;
                         playMoveSound();
+                        if (lockDelayTimer > 0) {
+                            lockDelayTimer = LOCK_DELAY_FRAMES;
+                            lockDelayMoveCount++;
+                        }
                     }
                     break;
-                case 'rotate':
-                    rotate();
+                case 'rotateRight':
+                    rotate(1);
+                    break;
+                case 'rotateLeft':
+                    rotate(-1);
                     break;
                 case 'drop':
                     playDropSound();
+                    // ハードドロップはロックディレイを無視して即固定
+                    lockDelayTimer = 0;
+                    lockDelayMoveCount = 0;
                     while (canMove(0, 1)) {
                         currentPiece.y++;
                         score += 1;
                     }
                     mergePiece();
                     isSettling = true;
+                    break;
+                case 'hold':
+                    holdCurrentPiece();
                     break;
             }
         }
@@ -4221,12 +4441,29 @@
                     }
                     break;
                 }
-                case 'gameOver':
+                case 'gameOver': {
                     if (!gameOverReady) return;
-                    gameState = 'title';
-                    playTitleBGM();
-                    drawTitleScreen();
+                    // ボタン位置を再計算してヒット判定
+                    const goW = canvas.width, goCx = goW / 2;
+                    const goWinMargin = Math.max(16, goW * 0.06);
+                    const goWinY = canvas.height * 0.08, goWinH = canvas.height * 0.82;
+                    const goBaseY = goWinY + goWinH * 0.12;
+                    const goStatY = goBaseY + (rankPosition > 0 ? 125 : 110) + (isNewPersonalBest ? 25 : 0);
+                    const goBtns = getGameOverButtons(goStatY + 4 * 32 + 20, goW, goCx);
+                    if (x >= goBtns.retry.x && x <= goBtns.retry.x + goBtns.retry.w &&
+                        y >= goBtns.retry.y && y <= goBtns.retry.y + goBtns.retry.h) {
+                        // リトライ: 即座にゲーム再開
+                        stopAllBGM();
+                        resetGame();
+                    } else if (x >= goBtns.title.x && x <= goBtns.title.x + goBtns.title.w &&
+                               y >= goBtns.title.y && y <= goBtns.title.y + goBtns.title.h) {
+                        // タイトルへ戻る
+                        gameState = 'title';
+                        playTitleBGM();
+                        drawTitleScreen();
+                    }
                     break;
+                }
                 case 'settings':
                     handleSettingsTap(x, y);
                     break;
@@ -4390,8 +4627,10 @@
 
         function resumeGame() {
             if (gameState === 'paused') {
-                gameState = 'playing';
-                update();
+                gameState = 'startScreen';
+                countdownLastNumber = -1;
+                startScreenTime = Date.now();
+                drawStartScreen();
             }
         }
 
@@ -4502,6 +4741,10 @@
                     handleTouch('drop');
                     isTouchHolding = false;
                 }
+                if (deltaY < -swipeV) {
+                    handleTouch('hold');
+                    isTouchHolding = false;
+                }
             }, { passive: false });
 
             canvas.addEventListener('touchend', (e) => {
@@ -4544,7 +4787,9 @@
                     const deltaX = touch.clientX - touchStartX;
                     const deltaY = touch.clientY - touchStartY;
                     if (touchDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && isTouchHolding) {
-                        handleTouch('rotate');
+                        // 画面左半分=左回転、右半分=右回転
+                        const halfX = canvas.width / 2;
+                        handleTouch(x < halfX ? 'rotateLeft' : 'rotateRight');
                     }
                     isTouchHolding = false;
                 } else {
