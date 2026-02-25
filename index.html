@@ -363,6 +363,7 @@
                 rule5: 'コンボでスコアアップ！',
                 rule6: '5コンボ以上で全消去ボーナス！',
                 rule7: '3コンボでフィーバー突入！',
+                rule8: 'レベルが上がると色が増える！',
                 welcomeMsg: 'はじめに設定と遊び方をご案内します',
                 welcomeTap: 'タップして進む',
                 privacyPolicy: 'プライバシーポリシー',
@@ -370,6 +371,7 @@
                 contact: 'お問い合わせ',
                 personalBest: '自己ベスト',
                 newPersonalBest: '自己ベスト更新！',
+                retry: 'もう一度',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -394,6 +396,7 @@
                 rule5: 'Chain combos for bonus points!',
                 rule6: '5+ combos triggers All Clear bonus!',
                 rule7: '3 combos activates Fever mode!',
+                rule8: 'More colors appear as you level up!',
                 welcomeMsg: 'First, let us set up and show you how to play',
                 welcomeTap: 'Tap to continue',
                 privacyPolicy: 'Privacy Policy',
@@ -401,6 +404,7 @@
                 contact: 'Contact',
                 personalBest: 'Best',
                 newPersonalBest: 'New Personal Best!',
+                retry: 'Retry',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -934,9 +938,17 @@
         /**
          * 新しいパズルピースを作成する
          */
+        // 現在のレベルで使用可能な色数を返す
+        function getAvailableColorCount() {
+            const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+            if (level >= 10) return 5; // Lv10+: 5色（全色）
+            if (level >= 5) return 4;  // Lv5-9: 4色
+            return 3;                  // Lv1-4: 3色
+        }
+
         function createPiece() {
             const pieceType = Math.floor(Math.random() * pieces.length);
-            const colorIndex = Math.floor(Math.random() * colors.length);
+            const colorIndex = Math.floor(Math.random() * getAvailableColorCount());
             const shape = pieces[pieceType];
             return {
                 shape: shape,
@@ -3603,7 +3615,7 @@
             // ルール一覧
             const rules = [
                 t('rule1'), t('rule2'), t('rule3'),
-                t('rule4'), t('rule5'), t('rule7'), t('rule6')
+                t('rule4'), t('rule8'), t('rule5'), t('rule7'), t('rule6')
             ];
             const ruleStartY = winY + 80;
             const ruleLineH = Math.min(42, (H * 0.45) / rules.length);
@@ -3700,8 +3712,8 @@
 
             // SFC風ウィンドウ枠
             const winMargin = Math.max(16, W * 0.06);
-            const winX = winMargin, winY = H * 0.12;
-            const winW = W - winMargin * 2, winH = H * 0.72;
+            const winX = winMargin, winY = H * 0.08;
+            const winW = W - winMargin * 2, winH = H * 0.82;
             drawSFCWindow(winX, winY, winW, winH, 'red');
 
             const baseY = winY + winH * 0.12;
@@ -3787,14 +3799,25 @@
                 ctx.fillText(stats[i].value, cx + 10, y);
             }
 
-            // タイトルに戻るボタン（SFC風）
+            // ボタン群（SFC風）
             if (gameOverReady) {
-                const btnW = Math.min(W * 0.55, 220);
-                const btnH = 44;
-                const btnX = cx - btnW / 2;
-                const btnY = statY + stats.length * lineH + 20;
-                drawSFCButton(btnX, btnY, btnW, btnH, t('returnToTitle'), 'blue');
+                const btns = getGameOverButtons(statY + stats.length * lineH + 20, W, cx);
+                drawSFCButton(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h, t('retry'), 'red');
+                drawSFCButton(btns.title.x, btns.title.y, btns.title.w, btns.title.h, t('returnToTitle'), 'blue');
             }
+        }
+
+        /**
+         * ゲームオーバー画面のボタン位置を計算する
+         */
+        function getGameOverButtons(topY, W, cx) {
+            const btnW = Math.min(W * 0.55, 220);
+            const btnH = 44;
+            const gap = 14;
+            return {
+                retry: { x: cx - btnW / 2, y: topY, w: btnW, h: btnH },
+                title: { x: cx - btnW / 2, y: topY + btnH + gap, w: btnW, h: btnH },
+            };
         }
 
         /**
@@ -4221,12 +4244,29 @@
                     }
                     break;
                 }
-                case 'gameOver':
+                case 'gameOver': {
                     if (!gameOverReady) return;
-                    gameState = 'title';
-                    playTitleBGM();
-                    drawTitleScreen();
+                    // ボタン位置を再計算してヒット判定
+                    const goW = canvas.width, goCx = goW / 2;
+                    const goWinMargin = Math.max(16, goW * 0.06);
+                    const goWinY = canvas.height * 0.08, goWinH = canvas.height * 0.82;
+                    const goBaseY = goWinY + goWinH * 0.12;
+                    const goStatY = goBaseY + (rankPosition > 0 ? 125 : 110) + (isNewPersonalBest ? 25 : 0);
+                    const goBtns = getGameOverButtons(goStatY + 4 * 32 + 20, goW, goCx);
+                    if (x >= goBtns.retry.x && x <= goBtns.retry.x + goBtns.retry.w &&
+                        y >= goBtns.retry.y && y <= goBtns.retry.y + goBtns.retry.h) {
+                        // リトライ: 即座にゲーム再開
+                        stopAllBGM();
+                        resetGame();
+                    } else if (x >= goBtns.title.x && x <= goBtns.title.x + goBtns.title.w &&
+                               y >= goBtns.title.y && y <= goBtns.title.y + goBtns.title.h) {
+                        // タイトルへ戻る
+                        gameState = 'title';
+                        playTitleBGM();
+                        drawTitleScreen();
+                    }
                     break;
+                }
                 case 'settings':
                     handleSettingsTap(x, y);
                     break;
