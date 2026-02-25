@@ -4417,6 +4417,13 @@
                         // ロックディレイをリセット
                         lockDelayTimer = 0;
                         lockDelayMoveCount = 0;
+                    } else {
+                        // 着地した: ロックディレイを開始して左右移動の猶予を与える
+                        if (lockDelayTimer === 0) {
+                            lockDelayTimer = LOCK_DELAY_FRAMES;
+                            lockDelayMoveCount = 0;
+                        }
+                        stopSoftDrop();
                     }
                     break;
                 case 'hold':
