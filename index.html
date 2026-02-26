@@ -328,6 +328,7 @@
         // ===== UI領域 =====
         let holdBoxRect = null;
         let nextBoxRect = null;
+        let holdFlashTimer = 0; // HOLDタップ時のフラッシュ演出
         let pauseConfirmQuit = false;
         let pleaseTapAnimation = null;
 
@@ -1742,12 +1743,20 @@
             ctx.fillStyle = boxBg;
             ctx.fillRect(holdBoxX, curY, holdBoxW, boxH);
 
+            // フラッシュ演出（タップ時に白く光る）
+            if (holdFlashTimer > 0) {
+                const flashAlpha = holdFlashTimer / 15 * 0.4;
+                ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+                ctx.fillRect(holdBoxX, curY, holdBoxW, boxH);
+                holdFlashTimer--;
+            }
+
             if (!holdUsed && gameState === 'playing') {
                 // 使用可能時: 明るいボーダー
                 ctx.strokeStyle = isWarm ? 'rgba(220, 180, 60, 0.6)' : 'rgba(130, 150, 220, 0.6)';
                 ctx.lineWidth = 2;
             } else if (holdUsed) {
-                // 使用済み: 暗いボーダー
+                // 使用済み: 暗いボーダー + LOCKテキスト
                 ctx.strokeStyle = isWarm ? 'rgba(100, 80, 30, 0.3)' : 'rgba(60, 60, 100, 0.3)';
                 ctx.lineWidth = 1;
             } else {
@@ -1759,13 +1768,36 @@
                 ctx.globalAlpha = holdUsed ? 0.35 : 1.0;
                 drawMiniPiece(holdPiece, centerX, curY + boxH / 2, mainBlockSize);
                 ctx.globalAlpha = 1.0;
+                // 使用済みマーク
+                if (holdUsed) {
+                    const lockSize = Math.max(8, areaW * 0.085);
+                    ctx.globalAlpha = 0.5;
+                    ctx.fillStyle = '#888888';
+                    ctx.font = `bold ${lockSize}px Arial`;
+                    ctx.fillText('LOCKED', centerX, curY + boxH - lockSize * 0.4);
+                    ctx.globalAlpha = 1.0;
+                }
             } else if (gameState === 'playing') {
-                // 空のとき: TAP ヒントを表示
+                // 空のとき: タップを促すヒント
                 const hintSize = Math.max(10, areaW * 0.1);
-                ctx.globalAlpha = 0.4;
+                const pulse = 0.3 + 0.15 * Math.sin(Date.now() * 0.003);
+                ctx.globalAlpha = pulse;
                 ctx.fillStyle = isWarm ? '#c0a040' : '#8899cc';
-                ctx.font = `bold ${hintSize * 1.2}px Arial`;
-                ctx.fillText('TAP', centerX, curY + boxH / 2 + hintSize * 0.3);
+                // 上矢印アイコン
+                const arrowY = curY + boxH * 0.35;
+                const arrowSize = hintSize * 0.8;
+                ctx.beginPath();
+                ctx.moveTo(centerX, arrowY - arrowSize * 0.5);
+                ctx.lineTo(centerX + arrowSize * 0.5, arrowY + arrowSize * 0.2);
+                ctx.lineTo(centerX + arrowSize * 0.2, arrowY + arrowSize * 0.2);
+                ctx.lineTo(centerX + arrowSize * 0.2, arrowY + arrowSize * 0.6);
+                ctx.lineTo(centerX - arrowSize * 0.2, arrowY + arrowSize * 0.6);
+                ctx.lineTo(centerX - arrowSize * 0.2, arrowY + arrowSize * 0.2);
+                ctx.lineTo(centerX - arrowSize * 0.5, arrowY + arrowSize * 0.2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.font = `bold ${hintSize * 0.75}px Arial`;
+                ctx.fillText('TAP', centerX, curY + boxH * 0.7 + hintSize * 0.15);
                 ctx.globalAlpha = 1.0;
             }
             curY += boxH + 4;
@@ -2009,8 +2041,18 @@
          * ホールド: 現在のピースをストックし、ストック済みのピースと交換する
          */
         function holdCurrentPiece() {
-            if (!currentPiece || holdUsed) return;
+            if (!currentPiece || holdUsed) {
+                // 使用済み時のタップフィードバック
+                if (holdUsed && holdBoxRect) {
+                    const gameAreaWidth = cellSize * gridWidth;
+                    const areaW = canvas.width - gameAreaWidth;
+                    const cx = gameAreaWidth + areaW / 2;
+                    addFloatingText('LOCKED', cx, holdBoxRect.y + holdBoxRect.h / 2, '#ff6666');
+                }
+                return;
+            }
             holdUsed = true;
+            holdFlashTimer = 15;
             lockDelayTimer = 0;
             lockDelayMoveCount = 0;
 
@@ -2027,6 +2069,12 @@
 
             const savedColor = currentPiece.color;
 
+            // フローティングテキストで操作結果を表示
+            const gameAreaWidth = cellSize * gridWidth;
+            const areaW = canvas.width - gameAreaWidth;
+            const cx = gameAreaWidth + areaW / 2;
+            const fy = holdBoxRect ? holdBoxRect.y + holdBoxRect.h / 2 : 40;
+
             if (holdPiece) {
                 // ホールド済みのピースと交換
                 const temp = holdPiece;
@@ -2037,12 +2085,14 @@
                     x: Math.floor(gridWidth / 2) - Math.floor(temp.shape[0].length / 2),
                     y: 0
                 };
+                addFloatingText('SWAP!', cx, fy, COLOR_GOLD);
             } else {
                 // 初回ホールド: 現在のピースを格納し、NEXTキューから補充
                 holdPiece = { shape: currentPiece.shape, color: savedColor };
                 currentPiece = nextPiece;
                 nextPiece = nextPiece2;
                 nextPiece2 = createPiece();
+                addFloatingText('HOLD!', cx, fy, COLOR_GOLD);
             }
             playRotateSound();
         }
@@ -2749,7 +2799,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.713', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.714', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3669,7 +3719,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.713', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.714', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
