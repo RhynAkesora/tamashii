@@ -266,6 +266,11 @@
         // 砂粒グリッド幅（数値キー計算用）
         const SAND_GRID_WIDTH = gridWidth * cellDivisions; // 45
 
+        // テーマカラー
+        const COLOR_GOLD = '#ffd700';
+        const COLOR_TEXT = '#eee8d0';
+        const COLOR_FEVER = '#ff00ff';
+
         // UI設定
         const NEXT_PIECE_PADDING = 10;
         const NEXT_PIECE_LABEL = 'NEXT';
@@ -571,7 +576,7 @@
                     masterGain.gain.value = soundMuted ? 0 : 1.0;
                     masterGain.connect(audioCtx.destination);
                     soundsEnabled = true;
-                } catch (e) {
+                } catch(e) {
                     // Web Audio API未サポート
                 }
             } else if (audioCtx.state === 'suspended') {
@@ -739,7 +744,7 @@
             ctx.globalCompositeOperation = 'source-over';
         }
         
-        function addFloatingText(text, x, y, color = '#ffd700') {
+        function addFloatingText(text, x, y, color = COLOR_GOLD) {
             floatingTexts.push({
                 text, x, y,
                 vy: -1.5,
@@ -789,7 +794,7 @@
                 auth = getAuth(app);
                 
                 await signInAnonymously(auth);
-            } catch (error) {
+            } catch(e) {
                 db = null; 
             }
         }
@@ -818,7 +823,7 @@
                     maxCombo: finalMaxCombo,
                     createdAt: serverTimestamp()
                 });
-            } catch (error) {
+            } catch(e) {
             }
         }
 
@@ -836,7 +841,7 @@
                 const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(20));
                 const querySnapshot = await getDocs(q);
                 highScores = querySnapshot.docs.map(doc => doc.data());
-            } catch (error) {
+            } catch(e) {
                 highScores = [];
             }
         }
@@ -1534,7 +1539,7 @@
             }
 
             // テキスト
-            ctx.fillStyle = '#eee8d0';
+            ctx.fillStyle = COLOR_TEXT;
             ctx.font = `bold ${fs}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -1815,7 +1820,7 @@
             ctx.fillStyle = labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
             ctx.fillText('LINES', centerX, curY + infoFontSmall);
-            ctx.fillStyle = '#ffd700';
+            ctx.fillStyle = COLOR_GOLD;
             ctx.font = `bold ${infoFontLarge}px Arial`;
             ctx.fillText(`${totalLinesCleared}`, centerX, curY + infoFontSmall + infoLineH);
             curY += infoFontSmall + infoLineH + 4;
@@ -1824,11 +1829,11 @@
             curY += 4;
 
             // COMBO
-            ctx.fillStyle = isFever ? '#ff00ff' : labelColor;
+            ctx.fillStyle = isFever ? COLOR_FEVER : labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
             ctx.fillText(isFever ? `FEVER ${Math.ceil(feverTimer / 60)}s` : 'COMBO', centerX, curY + infoFontSmall);
             if (comboCount > 0) {
-                ctx.fillStyle = isFever ? '#ff00ff' : comboCount >= 4 ? '#ff00ff' : comboCount >= 2 ? '#ff6699' : '#ffd700';
+                ctx.fillStyle = isFever ? COLOR_FEVER : comboCount >= 4 ? COLOR_FEVER : comboCount >= 2 ? '#ff6699' : COLOR_GOLD;
             } else {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             }
@@ -2615,7 +2620,7 @@
             } else {
                 // フォールバック：テキストタイトル
                 const titleFontSize = isSmallScreen ? 28 : 36;
-                ctx.fillStyle = '#ffd700';
+                ctx.fillStyle = COLOR_GOLD;
                 ctx.font = `bold ${titleFontSize}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.shadowColor = 'rgba(255, 150, 0, 0.6)';
@@ -2689,7 +2694,7 @@
             // テキスト（ボックス中央に配置）
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#ffd700';
+            ctx.fillStyle = COLOR_GOLD;
             ctx.shadowColor = 'rgba(255, 200, 0, 0.3)';
             ctx.shadowBlur = 4;
             ctx.fillText(conceptText, cx, conceptY);
@@ -2733,7 +2738,7 @@
             ctx.strokeStyle = 'rgba(20, 10, 50, 0.8)';
             ctx.lineWidth = 3;
             ctx.strokeText(instText, cx, instructionY);
-            ctx.fillStyle = '#eee8d0';
+            ctx.fillStyle = COLOR_TEXT;
             ctx.shadowColor = 'rgba(140, 120, 255, 0.5)';
             ctx.shadowBlur = 6;
             ctx.fillText(instText, cx, instructionY);
@@ -2744,7 +2749,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.712', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.713', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -2758,7 +2763,7 @@
                 audio.preload = 'auto';
                 audio.addEventListener('error', () => {});
                 return audio;
-            } catch (error) {
+            } catch(e) {
                 // BGM初期化失敗
                 return null;
             }
@@ -2802,7 +2807,7 @@
                     return;
                 }
                 _playFlashBuffer();
-            } catch (e) {}
+            } catch(e) {}
         }
         function _playFlashBuffer() {
             // 前回の再生を停止
@@ -2820,7 +2825,7 @@
 
         function stopFlashSound() {
             if (flashSoundSource) {
-                try { flashSoundSource.stop(); } catch (e) {}
+                try { flashSoundSource.stop(); } catch(e) {}
                 flashSoundSource = null;
             }
         }
@@ -2844,7 +2849,7 @@
             stopAllBGM();
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             activeBGM = audio;
-            if (audio) { try { audio.currentTime = 0; audio.volume = BGM_VOLUME; if (!soundMuted) audio.play().catch(e => {}); } catch (e) {} }
+            if (audio) { try { audio.currentTime = 0; audio.volume = BGM_VOLUME; if (!soundMuted) audio.play().catch(e => {}); } catch(e) {} }
         }
 
         function playBGM() { const bgm = getStageBGM(); currentStageBgm = bgm; startBGM(bgm); }
@@ -2993,20 +2998,31 @@
         /**
          * ハイスコア画面を描画する
          */
-        function drawHighScoreScreen(isLoading = false) {
-            const W = canvas.width;
-            const H = canvas.height;
+        // ハイスコア画面の共通レイアウト計算
+        function getHsLayout() {
+            const W = canvas.width, H = canvas.height;
             const scale = Math.min(W / 360, H / 640);
+            const titleH = Math.floor(55 * scale);
+            const titleY = Math.floor(10 * scale);
+            const backBtnH = Math.floor(36 * scale);
+            const backBtnW = Math.floor(120 * scale);
+            const backBtnX = (W - backBtnW) / 2;
+            const safeBottom = 40;
+            const backBtnY = H - backBtnH - safeBottom;
+            const pbAreaH = personalBest.score > 0 ? Math.floor(28 * scale) : 0;
+            const listTop = titleY + titleH + pbAreaH + Math.floor(8 * scale);
+            const listBottom = backBtnY - Math.floor(10 * scale);
+            return { W, H, scale, titleH, titleY, backBtnH, backBtnW, backBtnX, backBtnY, pbAreaH, listTop, listBottom };
+        }
 
-            // --- 背景 ---
+        // ハイスコア画面：背景＋星
+        function drawHsBg(W, H, scale) {
             const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
             bgGrad.addColorStop(0, '#0a0030');
             bgGrad.addColorStop(0.5, '#1a0a40');
             bgGrad.addColorStop(1, '#0a0020');
             ctx.fillStyle = bgGrad;
             ctx.fillRect(0, 0, W, H);
-
-            // 背景の星
             ctx.fillStyle = '#ffffff';
             for (let i = 0; i < 40; i++) {
                 const sx = ((i * 137 + 51) % 1000) / 1000 * W;
@@ -3016,17 +3032,15 @@
                 ctx.fillRect(sx, sy, 1.5 * scale, 1.5 * scale);
             }
             ctx.globalAlpha = 1.0;
+        }
 
-            // --- タイトルエリア ---
-            const titleH = Math.floor(55 * scale);
-            const titleY = Math.floor(10 * scale);
-
-            // 王冠アイコン
+        // ハイスコア画面：王冠＋タイトル
+        function drawHsCrown(W, scale, titleY, titleH) {
             const crownCx = W / 2;
             const crownY = titleY + titleH * 0.25;
             const crownW = 24 * scale;
             const crownH = 16 * scale;
-            ctx.fillStyle = '#ffd700';
+            ctx.fillStyle = COLOR_GOLD;
             ctx.beginPath();
             ctx.moveTo(crownCx - crownW / 2, crownY + crownH);
             ctx.lineTo(crownCx - crownW / 2, crownY + crownH * 0.4);
@@ -3037,31 +3051,89 @@
             ctx.lineTo(crownCx + crownW / 2, crownY + crownH);
             ctx.closePath();
             ctx.fill();
-            // 王冠の宝石
             ctx.fillStyle = '#ff4444';
             const jewel = 2.5 * scale;
             ctx.fillRect(crownCx - jewel / 2, crownY + crownH * 0.45, jewel, jewel);
             ctx.fillStyle = '#44aaff';
             ctx.fillRect(crownCx - crownW * 0.3 - jewel / 2, crownY + crownH * 0.55, jewel, jewel);
             ctx.fillRect(crownCx + crownW * 0.3 - jewel / 2, crownY + crownH * 0.55, jewel, jewel);
-
-            // TOP 20 タイトル
             const titleFontSize = Math.floor(22 * scale);
             ctx.font = `bold ${titleFontSize}px Arial`;
             ctx.textAlign = 'center';
-            ctx.fillStyle = '#ffd700';
+            ctx.fillStyle = COLOR_GOLD;
             ctx.shadowColor = '#ffaa00';
             ctx.shadowBlur = 8 * scale;
             ctx.fillText(t('hsTitle'), W / 2, crownY + crownH + titleFontSize * 0.9);
             ctx.shadowBlur = 0;
+        }
 
-            // --- BACKボタン ---
-            const backBtnH = Math.floor(36 * scale);
-            const backBtnW = Math.floor(120 * scale);
-            const backBtnX = (W - backBtnW) / 2;
-            const safeBottom = 40;
-            const backBtnY = H - backBtnH - safeBottom;
+        // ハイスコア画面：スコアリスト行
+        function drawHsScoreRow(i, s, rowX, rowY, rowW, rowInnerH, scale, rankFontSize, nameFontSize, scoreFontSize) {
+            // 行の背景
+            if (i < 3) {
+                const colors = [
+                    ['rgba(180, 140, 20, 0.5)', 'rgba(255, 215, 0, 0.35)'],
+                    ['rgba(120, 120, 140, 0.5)', 'rgba(200, 200, 220, 0.35)'],
+                    ['rgba(160, 100, 40, 0.5)', 'rgba(210, 140, 70, 0.35)']
+                ];
+                const g = ctx.createLinearGradient(rowX, rowY, rowX + rowW, rowY);
+                g.addColorStop(0, colors[i][0]);
+                g.addColorStop(0.5, colors[i][1]);
+                g.addColorStop(1, colors[i][0]);
+                ctx.fillStyle = g;
+            } else {
+                ctx.fillStyle = i % 2 === 0 ? 'rgba(30, 30, 80, 0.5)' : 'rgba(20, 20, 60, 0.4)';
+            }
+            ctx.fillRect(rowX, rowY + 2 * scale, rowW, rowInnerH);
 
+            const textY = rowY + rowInnerH * 0.5 + rankFontSize * 0.35 + 2 * scale;
+
+            // 順位
+            ctx.font = `bold ${rankFontSize}px Arial`;
+            ctx.textAlign = 'right';
+            if (i === 0) ctx.fillStyle = COLOR_GOLD;
+            else if (i === 1) ctx.fillStyle = '#c0c0d0';
+            else if (i === 2) ctx.fillStyle = '#cd8844';
+            else ctx.fillStyle = 'rgba(200, 200, 230, 0.7)';
+            const rankX = rowX + Math.floor(28 * scale);
+            ctx.fillText(`${i + 1}`, rankX, textY);
+
+            // 名前
+            ctx.font = `${nameFontSize}px Arial`;
+            ctx.textAlign = 'left';
+            ctx.fillStyle = i < 3 ? '#ffffff' : '#ccccee';
+            ctx.fillText(s.name || t('anonymous'), rankX + Math.floor(8 * scale), textY);
+
+            // スコア
+            ctx.font = `bold ${scoreFontSize}px Arial`;
+            ctx.textAlign = 'right';
+            if (i === 0) ctx.fillStyle = '#ffee88';
+            else if (i < 3) ctx.fillStyle = '#eeddcc';
+            else ctx.fillStyle = '#aaaacc';
+            const scoreX = rowX + rowW - Math.floor(6 * scale);
+            ctx.fillText(s.score.toLocaleString(), scoreX, textY);
+
+            // コンボ表示
+            if (s.maxCombo && s.maxCombo > 0) {
+                const comboFontSize = Math.floor(10 * scale);
+                ctx.font = `${comboFontSize}px Arial`;
+                ctx.fillStyle = 'rgba(255, 150, 200, 0.7)';
+                ctx.textAlign = 'right';
+                ctx.fillText(`${s.maxCombo}combo`, scoreX, textY + comboFontSize + 2 * scale);
+            }
+        }
+
+        function drawHighScoreScreen(isLoading = false) {
+            const { W, H, scale, titleH, titleY, backBtnH, backBtnW, backBtnX, backBtnY, pbAreaH, listTop, listBottom } = getHsLayout();
+            const listH = listBottom - listTop;
+            const listMarginX = Math.floor(8 * scale);
+            const listW = W - listMarginX * 2;
+            const listX = listMarginX;
+
+            drawHsBg(W, H, scale);
+            drawHsCrown(W, scale, titleY, titleH);
+
+            // BACKボタン
             ctx.fillStyle = 'rgba(80, 80, 120, 0.8)';
             ctx.strokeStyle = '#8888cc';
             ctx.lineWidth = 2 * scale;
@@ -3084,8 +3156,7 @@
             ctx.fillStyle = '#ccccee';
             ctx.fillText(t('hsBack'), W / 2, backBtnY + backBtnH / 2 + backFontSize * 0.35);
 
-            // --- 自己ベスト表示 ---
-            const pbAreaH = personalBest.score > 0 ? Math.floor(28 * scale) : 0;
+            // 自己ベスト表示
             if (personalBest.score > 0) {
                 const pbY = titleY + titleH + Math.floor(6 * scale);
                 const pbFontSize = Math.floor(13 * scale);
@@ -3098,53 +3169,39 @@
                 ctx.shadowBlur = 0;
             }
 
-            // --- リストエリア ---
-            const listTop = titleY + titleH + pbAreaH + Math.floor(8 * scale);
-            const listBottom = backBtnY - Math.floor(10 * scale);
-            const listH = listBottom - listTop;
-            const listMarginX = Math.floor(8 * scale);
-            const listW = W - listMarginX * 2;
-            const listX = listMarginX;
-
-            // SFC風ウィンドウ枠
+            // リストエリア枠
             ctx.fillStyle = 'rgba(10, 10, 50, 0.85)';
             ctx.strokeStyle = '#6666aa';
             ctx.lineWidth = 2.5 * scale;
             ctx.fillRect(listX, listTop, listW, listH);
             ctx.strokeRect(listX, listTop, listW, listH);
-            // 内側のハイライト枠
             ctx.strokeStyle = 'rgba(150, 150, 220, 0.3)';
             ctx.lineWidth = 1;
             ctx.strokeRect(listX + 3 * scale, listTop + 3 * scale, listW - 6 * scale, listH - 6 * scale);
 
             if (isLoading) {
-                const loadFontSize = Math.floor(16 * scale);
-                ctx.font = `${loadFontSize}px Arial`;
+                ctx.font = `${Math.floor(16 * scale)}px Arial`;
                 ctx.fillStyle = '#aaaacc';
                 ctx.textAlign = 'center';
                 ctx.fillText(t('loading'), W / 2, listTop + listH / 2);
                 return;
             }
             if (highScores.length === 0) {
-                const emptyFontSize = Math.floor(16 * scale);
-                ctx.font = `${emptyFontSize}px Arial`;
+                ctx.font = `${Math.floor(16 * scale)}px Arial`;
                 ctx.fillStyle = '#aaaacc';
                 ctx.textAlign = 'center';
                 ctx.fillText(t('noScores'), W / 2, listTop + listH / 2);
                 return;
             }
 
-            // --- スクロールリスト描画 ---
+            // スクロールリスト
             const rowH = Math.floor(38 * scale);
             const innerPad = Math.floor(5 * scale);
             const contentH = highScores.length * rowH + innerPad * 2;
             const maxScroll = Math.max(0, contentH - listH);
-
-            // スクロール範囲をクランプ
             if (hsScrollY < 0) hsScrollY = 0;
             if (hsScrollY > maxScroll) hsScrollY = maxScroll;
 
-            // クリップ
             ctx.save();
             ctx.beginPath();
             ctx.rect(listX + 1, listTop + 1, listW - 2, listH - 2);
@@ -3155,103 +3212,27 @@
             const scoreFontSize = Math.floor(13 * scale);
 
             for (let i = 0; i < highScores.length; i++) {
-                const s = highScores[i];
                 const ry = listTop + innerPad + i * rowH - hsScrollY;
-
-                // 画面外は描画スキップ
                 if (ry + rowH < listTop || ry > listBottom) continue;
-
-                const rowY = ry;
                 const rowX = listX + Math.floor(6 * scale);
                 const rowW = listW - Math.floor(12 * scale);
                 const rowInnerH = rowH - Math.floor(4 * scale);
-
-                // 行の背景
-                if (i === 0) {
-                    // 1位: 金
-                    const g = ctx.createLinearGradient(rowX, rowY, rowX + rowW, rowY);
-                    g.addColorStop(0, 'rgba(180, 140, 20, 0.5)');
-                    g.addColorStop(0.5, 'rgba(255, 215, 0, 0.35)');
-                    g.addColorStop(1, 'rgba(180, 140, 20, 0.5)');
-                    ctx.fillStyle = g;
-                } else if (i === 1) {
-                    // 2位: 銀
-                    const g = ctx.createLinearGradient(rowX, rowY, rowX + rowW, rowY);
-                    g.addColorStop(0, 'rgba(120, 120, 140, 0.5)');
-                    g.addColorStop(0.5, 'rgba(200, 200, 220, 0.35)');
-                    g.addColorStop(1, 'rgba(120, 120, 140, 0.5)');
-                    ctx.fillStyle = g;
-                } else if (i === 2) {
-                    // 3位: 銅
-                    const g = ctx.createLinearGradient(rowX, rowY, rowX + rowW, rowY);
-                    g.addColorStop(0, 'rgba(160, 100, 40, 0.5)');
-                    g.addColorStop(0.5, 'rgba(210, 140, 70, 0.35)');
-                    g.addColorStop(1, 'rgba(160, 100, 40, 0.5)');
-                    ctx.fillStyle = g;
-                } else {
-                    ctx.fillStyle = i % 2 === 0 ? 'rgba(30, 30, 80, 0.5)' : 'rgba(20, 20, 60, 0.4)';
-                }
-                ctx.fillRect(rowX, rowY + 2 * scale, rowW, rowInnerH);
-
-                // 順位
-                ctx.font = `bold ${rankFontSize}px Arial`;
-                ctx.textAlign = 'right';
-                if (i === 0) ctx.fillStyle = '#ffd700';
-                else if (i === 1) ctx.fillStyle = '#c0c0d0';
-                else if (i === 2) ctx.fillStyle = '#cd8844';
-                else ctx.fillStyle = 'rgba(200, 200, 230, 0.7)';
-                const rankX = rowX + Math.floor(28 * scale);
-                const textY = rowY + rowInnerH * 0.5 + rankFontSize * 0.35 + 2 * scale;
-                ctx.fillText(`${i + 1}`, rankX, textY);
-
-                // 名前
-                ctx.font = `${nameFontSize}px Arial`;
-                ctx.textAlign = 'left';
-                if (i < 3) ctx.fillStyle = '#ffffff';
-                else ctx.fillStyle = '#ccccee';
-                const nameX = rankX + Math.floor(8 * scale);
-                ctx.fillText(s.name || t('anonymous'), nameX, textY);
-
-                // スコア
-                ctx.font = `bold ${scoreFontSize}px Arial`;
-                ctx.textAlign = 'right';
-                if (i === 0) ctx.fillStyle = '#ffee88';
-                else if (i < 3) ctx.fillStyle = '#eeddcc';
-                else ctx.fillStyle = '#aaaacc';
-                const scoreX = rowX + rowW - Math.floor(6 * scale);
-                ctx.fillText(s.score.toLocaleString(), scoreX, textY);
-
-                // コンボ表示（あれば）
-                if (s.maxCombo && s.maxCombo > 0) {
-                    const comboFontSize = Math.floor(10 * scale);
-                    ctx.font = `${comboFontSize}px Arial`;
-                    ctx.fillStyle = 'rgba(255, 150, 200, 0.7)';
-                    ctx.textAlign = 'right';
-                    ctx.fillText(`${s.maxCombo}combo`, scoreX, textY + comboFontSize + 2 * scale);
-                }
+                drawHsScoreRow(i, highScores[i], rowX, ry, rowW, rowInnerH, scale, rankFontSize, nameFontSize, scoreFontSize);
             }
 
             ctx.restore();
 
-            // --- スクロールバー ---
+            // スクロールバー
             if (contentH > listH) {
                 const scrollBarH = Math.max(20 * scale, listH * (listH / contentH));
                 const scrollBarY = listTop + (listH - scrollBarH) * (hsScrollY / maxScroll);
-                const scrollBarX = listX + listW - 6 * scale;
                 ctx.fillStyle = 'rgba(150, 150, 200, 0.4)';
-                ctx.fillRect(scrollBarX, scrollBarY, 4 * scale, scrollBarH);
+                ctx.fillRect(listX + listW - 6 * scale, scrollBarY, 4 * scale, scrollBarH);
             }
         }
 
         function getHsBackBtnRect() {
-            const W = canvas.width;
-            const H = canvas.height;
-            const scale = Math.min(W / 360, H / 640);
-            const backBtnH = Math.floor(36 * scale);
-            const backBtnW = Math.floor(120 * scale);
-            const backBtnX = (W - backBtnW) / 2;
-            const safeBottom = 40;
-            const backBtnY = H - backBtnH - safeBottom;
+            const { backBtnX, backBtnY, backBtnW, backBtnH } = getHsLayout();
             return { x: backBtnX, y: backBtnY, w: backBtnW, h: backBtnH };
         }
 
@@ -3323,7 +3304,7 @@
             const innerR = r.w * 0.24;
             const holeR = r.w * 0.11;
             const teeth = 8;
-            ctx.fillStyle = '#eee8d0';
+            ctx.fillStyle = COLOR_TEXT;
             ctx.beginPath();
             for (let i = 0; i < teeth; i++) {
                 const a0 = (i / teeth) * Math.PI * 2 - Math.PI / 2;
@@ -3616,7 +3597,7 @@
             ctx.textBaseline = 'middle';
 
             // タイトル
-            ctx.fillStyle = '#eee8d0';
+            ctx.fillStyle = COLOR_TEXT;
             ctx.font = 'bold 26px Arial';
             ctx.shadowColor = 'rgba(100, 80, 200, 0.5)';
             ctx.shadowBlur = 8;
@@ -3688,7 +3669,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.71', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.713', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -3805,7 +3786,7 @@
             ctx.textBaseline = 'middle';
 
             // タイトル
-            ctx.fillStyle = '#eee8d0';
+            ctx.fillStyle = COLOR_TEXT;
             ctx.font = 'bold 24px Arial';
             ctx.shadowColor = 'rgba(100, 80, 200, 0.5)';
             ctx.shadowBlur = 8;
@@ -3838,7 +3819,7 @@
                 ctx.font = `${ruleFontSize * 0.7}px Arial`;
                 ctx.fillText('◆', ruleLeftX, ry);
                 // テキスト（ウィンドウ幅に合わせてフォントサイズ縮小）
-                ctx.fillStyle = '#eee8d0';
+                ctx.fillStyle = COLOR_TEXT;
                 let fs = ruleFontSize;
                 ctx.font = `bold ${fs}px Arial`;
                 while (ctx.measureText(rules[i]).width > ruleMaxW && fs > 9) {
@@ -3946,7 +3927,7 @@
             ctx.stroke();
 
             // スコア（大きく強調）
-            ctx.fillStyle = '#ffd700';
+            ctx.fillStyle = COLOR_GOLD;
             ctx.font = 'bold 36px Arial';
             ctx.shadowColor = 'rgba(255, 200, 0, 0.4)';
             ctx.shadowBlur = 6;
@@ -3992,7 +3973,7 @@
             const timeStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
             const stats = [
-                { label: t('linesCleared'), value: `${totalLinesCleared}`, color: '#ffd700' },
+                { label: t('linesCleared'), value: `${totalLinesCleared}`, color: COLOR_GOLD },
                 { label: t('maxCombo'), value: `${maxCombo}x`, color: '#ff6699' },
                 { label: t('levelReached'), value: `${finalLevel}`, color: '#88ccff' },
                 { label: t('playTime'), value: timeStr, color: '#88ff88' },
@@ -4154,10 +4135,10 @@
                         score += comboBonus;
                         showComboDisplay(comboCount, comboBonus);
                         triggerScreenShake(comboCount * 1.5, 15);
-                        addFloatingText(`+${comboBonus} COMBO${isFever ? ' x2' : ''}`, floatX, floatY - 20, isFever ? '#ff00ff' : '#ff6699');
+                        addFloatingText(`+${comboBonus} COMBO${isFever ? ' x2' : ''}`, floatX, floatY - 20, isFever ? COLOR_FEVER : '#ff6699');
                     }
                     score += basePoints;
-                    addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? '#ff00ff' : '#ffd700');
+                    addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? COLOR_FEVER : COLOR_GOLD);
 
                     // フィーバー発動・延長
                     if (comboCount >= FEVER_COMBO_THRESHOLD && !isFever) {
@@ -4165,14 +4146,14 @@
                         isFever = true;
                         feverTimer = FEVER_DURATION;
                         playFeverBGM();
-                        addFloatingText('FEVER!', floatX, floatY - 50, '#ff00ff');
+                        addFloatingText('FEVER!', floatX, floatY - 50, COLOR_FEVER);
                         triggerScreenShake(5, 20);
                     } else if (isFever) {
                         // フィーバー中は全てのライン消去でタイマー延長（コンボ数不問）
                         const ext = clearedLines * FEVER_LINE_BONUS;
                         feverTimer = Math.min(feverTimer + ext, FEVER_MAX);
                         const addSec = Math.round(ext / 60);
-                        addFloatingText(`FEVER +${addSec}s`, floatX, floatY - 50, '#ff00ff');
+                        addFloatingText(`FEVER +${addSec}s`, floatX, floatY - 50, COLOR_FEVER);
                     }
 
                     // ヨガ行者エフェクト更新
@@ -4190,7 +4171,7 @@
                                 y: yCenterY + (Math.random() - 0.5) * 30,
                                 vx: (Math.random() - 0.5) * 2,
                                 vy: -(Math.random() * 3 + 1),
-                                color: Math.random() < 0.5 ? '#ffd700' : '#ffffff',
+                                color: Math.random() < 0.5 ? COLOR_GOLD : '#ffffff',
                                 alpha: 1.0,
                                 size: Math.random() * 3 + 1.5,
                                 lifespan: 60 + Math.floor(Math.random() * 30)
@@ -4227,7 +4208,7 @@
                     if (isFever && comboCount >= 2) {
                         const comboTimerBonus = comboCount * 60; // コンボ数 × 1秒
                         feverTimer = Math.min(feverTimer + comboTimerBonus, FEVER_MAX);
-                        addFloatingText(`FEVER +${comboCount}s`, cellSize * gridWidth / 2, cellSize * gridHeight / 2 - 30, '#ff00ff');
+                        addFloatingText(`FEVER +${comboCount}s`, cellSize * gridWidth / 2, cellSize * gridHeight / 2 - 30, COLOR_FEVER);
                     }
 
                     if (pendingAllClear) {
@@ -4235,7 +4216,7 @@
                         const allClearBase = 3000;
                         const allClearBonus = isFever ? allClearBase * 2 : allClearBase;
                         score += allClearBonus;
-                        addFloatingText(`ALL CLEAR +${allClearBonus}${isFever ? ' x2!' : ''}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, '#ff00ff');
+                        addFloatingText(`ALL CLEAR +${allClearBonus}${isFever ? ' x2!' : ''}`, cellSize * gridWidth / 2, cellSize * gridHeight / 2, COLOR_FEVER);
                         playFlashSound();
                         triggerScreenShake(8, 25);
 
@@ -4363,7 +4344,7 @@
                 // FEVER カウントダウン テキスト（ブロックエリア最上部）
                 const feverSec = Math.ceil(feverTimer / 60);
                 ctx.globalAlpha = 0.3 + Math.sin(frameCount * 0.1) * 0.15;
-                ctx.fillStyle = '#ff00ff';
+                ctx.fillStyle = COLOR_FEVER;
                 ctx.font = `bold ${Math.max(20, cellSize * 1.2)}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.fillText(`FEVER ${feverSec}s`, gameAreaWidth / 2, cellSize * 1.2);
@@ -4644,7 +4625,7 @@
                 const cbtns = getConfirmButtons();
 
                 // タイトルテキスト
-                ctx.fillStyle = '#ffd700';
+                ctx.fillStyle = COLOR_GOLD;
                 ctx.font = 'bold 20px Arial';
                 ctx.shadowColor = 'rgba(255, 200, 0, 0.3)';
                 ctx.shadowBlur = 6;
@@ -4657,7 +4638,7 @@
                 // 通常ポーズ画面 - タイトル
                 const btns = getPauseButtons();
                 const pauseTitleY = btns.resume.y - 35;
-                ctx.fillStyle = '#eee8d0';
+                ctx.fillStyle = COLOR_TEXT;
                 ctx.font = 'bold 30px Arial';
                 ctx.shadowColor = 'rgba(100, 80, 200, 0.5)';
                 ctx.shadowBlur = 8;
