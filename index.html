@@ -330,6 +330,7 @@
         let touchStartY = 0;
         let touchStartTime = 0;
         let isTouchHolding = false;
+        let hasSwiped = false;
         let lastTouchEndTime = 0;
 
         // ===== UI領域 =====
@@ -4881,6 +4882,7 @@
                     touchStartY = touch.clientY;
                     touchStartTime = Date.now();
                     isTouchHolding = true;
+                    hasSwiped = false;
                     // ソフトドロップ: 長押し判定タイマー開始
                     stopSoftDrop();
                     softDropTimer = setTimeout(() => {
@@ -4912,6 +4914,7 @@
                 if (Math.abs(deltaX) > swipeH) {
                     // スワイプ検出: ソフトドロップタイマーをキャンセル
                     stopSoftDrop();
+                    hasSwiped = true;
                     handleTouch(deltaX > 0 ? 'right' : 'left');
                     touchStartX = touch.clientX;
                     touchStartY = touch.clientY;
@@ -4969,8 +4972,8 @@
                     const touchDuration = touchEndTime - touchStartTime;
                     const deltaX = touch.clientX - touchStartX;
                     const deltaY = touch.clientY - touchStartY;
-                    // ソフトドロップ中だった場合はタップ回転を発動しない
-                    if (!wasSoftDropping && touchDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && isTouchHolding) {
+                    // ソフトドロップ中 or スワイプ移動後はタップ回転を発動しない
+                    if (!wasSoftDropping && !hasSwiped && touchDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && isTouchHolding) {
                         // 画面左半分=左回転、右半分=右回転
                         const halfX = canvas.width / 2;
                         handleTouch(x < halfX ? 'rotateLeft' : 'rotateRight');
