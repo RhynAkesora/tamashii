@@ -4390,23 +4390,111 @@
             // フィーバー演出
             if (isFever) {
                 const gameAreaWidth = cellSize * gridWidth;
+                const gameAreaH = canvas.height;
                 const pulse = Math.sin(frameCount * 0.15) * 0.15 + 0.35;
+                const fastPulse = Math.sin(frameCount * 0.25) * 0.5 + 0.5;
+
+                // === プレイ領域背景演出 ===
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, gameAreaWidth, gameAreaH);
+                ctx.clip();
+
+                // 全体的なマゼンタ/紫のオーバーレイ（脈動）
+                const overlayAlpha = 0.04 + pulse * 0.04;
+                const overlayGrad = ctx.createRadialGradient(
+                    gameAreaWidth / 2, gameAreaH / 2, 0,
+                    gameAreaWidth / 2, gameAreaH / 2, gameAreaWidth * 0.8
+                );
+                overlayGrad.addColorStop(0, `rgba(255, 0, 255, ${overlayAlpha * 1.5})`);
+                overlayGrad.addColorStop(0.5, `rgba(180, 0, 255, ${overlayAlpha})`);
+                overlayGrad.addColorStop(1, `rgba(100, 0, 180, ${overlayAlpha * 0.5})`);
+                ctx.fillStyle = overlayGrad;
+                ctx.fillRect(0, 0, gameAreaWidth, gameAreaH);
+
+                // 上下から流れるライトビーム（2本ずつ、位置がゆっくり移動）
+                for (let i = 0; i < 4; i++) {
+                    const speed = 0.02 + i * 0.007;
+                    const xBase = ((frameCount * speed + i * 80) % (gameAreaWidth + 60)) - 30;
+                    const beamW = 15 + Math.sin(frameCount * 0.05 + i) * 8;
+                    const fromTop = i % 2 === 0;
+                    const beamGrad = ctx.createLinearGradient(
+                        xBase, fromTop ? 0 : gameAreaH,
+                        xBase, fromTop ? gameAreaH * 0.7 : gameAreaH * 0.3
+                    );
+                    const beamAlpha = 0.06 + fastPulse * 0.04;
+                    const hue = (i * 40 + frameCount * 0.5) % 60;
+                    beamGrad.addColorStop(0, `hsla(${300 + hue}, 100%, 70%, ${beamAlpha})`);
+                    beamGrad.addColorStop(0.5, `hsla(${300 + hue}, 100%, 60%, ${beamAlpha * 0.5})`);
+                    beamGrad.addColorStop(1, `hsla(${300 + hue}, 100%, 50%, 0)`);
+                    ctx.fillStyle = beamGrad;
+                    ctx.fillRect(xBase - beamW / 2, 0, beamW, gameAreaH);
+                }
+
+                // 浮遊するエネルギーパーティクル（軽量: 8個の光点）
+                for (let i = 0; i < 8; i++) {
+                    const t = frameCount * 0.008 + i * 1.3;
+                    const px = (Math.sin(t * 1.1 + i * 2.1) * 0.4 + 0.5) * gameAreaWidth;
+                    const py = ((t * 0.3 + i * 0.35) % 1.0) * gameAreaH;
+                    const r = 2 + Math.sin(frameCount * 0.1 + i) * 1.5;
+                    const pAlpha = 0.15 + Math.sin(frameCount * 0.12 + i * 0.8) * 0.1;
+                    const pGrad = ctx.createRadialGradient(px, py, 0, px, py, r * 4);
+                    pGrad.addColorStop(0, `rgba(255, 180, 255, ${pAlpha})`);
+                    pGrad.addColorStop(0.5, `rgba(255, 100, 255, ${pAlpha * 0.4})`);
+                    pGrad.addColorStop(1, 'rgba(255, 0, 255, 0)');
+                    ctx.fillStyle = pGrad;
+                    ctx.fillRect(px - r * 4, py - r * 4, r * 8, r * 8);
+                }
+
+                ctx.restore();
+
                 // 画面枠の光
                 ctx.strokeStyle = `rgba(255, 0, 255, ${pulse})`;
                 ctx.lineWidth = 4;
-                ctx.strokeRect(2, 2, gameAreaWidth - 4, canvas.height - 4);
+                ctx.strokeRect(2, 2, gameAreaWidth - 4, gameAreaH - 4);
                 // 残り時間バー（画面上部）
                 const barWidth = gameAreaWidth * (feverTimer / FEVER_MAX);
                 ctx.fillStyle = `rgba(255, 0, 255, ${0.5 + pulse * 0.3})`;
                 ctx.fillRect(0, 0, barWidth, 4);
-                // FEVER カウントダウン テキスト（ブロックエリア最上部）
+
+                // === FEVER カウントダウン テキスト（リッチ版） ===
                 const feverSec = Math.ceil(feverTimer / 60);
-                ctx.globalAlpha = 0.3 + Math.sin(frameCount * 0.1) * 0.15;
-                ctx.fillStyle = COLOR_FEVER;
-                ctx.font = `bold ${Math.max(20, cellSize * 1.2)}px Arial`;
+                const feverText = `FEVER ${feverSec}s`;
+                const fontSize = Math.max(22, cellSize * 1.4) + Math.sin(frameCount * 0.12) * 2;
+                const textX = gameAreaWidth / 2;
+                const textY = cellSize * 1.3;
+                ctx.save();
                 ctx.textAlign = 'center';
-                ctx.fillText(`FEVER ${feverSec}s`, gameAreaWidth / 2, cellSize * 1.2);
-                ctx.globalAlpha = 1.0;
+                ctx.textBaseline = 'middle';
+                ctx.font = `bold ${fontSize}px 'Arial Black', Arial, sans-serif`;
+                ctx.globalAlpha = 0.35 + Math.sin(frameCount * 0.1) * 0.1;
+
+                // 外側グロー（大きいぼかし）
+                ctx.shadowColor = 'rgba(255, 0, 255, 0.8)';
+                ctx.shadowBlur = 20 + fastPulse * 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                // ゴールド→マゼンタのグラデーション塗り
+                const textGrad = ctx.createLinearGradient(
+                    textX - fontSize * 2, textY - fontSize / 2,
+                    textX + fontSize * 2, textY + fontSize / 2
+                );
+                const gradShift = (frameCount * 0.01) % 1;
+                textGrad.addColorStop(0, `hsl(${(320 + gradShift * 60) % 360}, 100%, 75%)`);
+                textGrad.addColorStop(0.3, `hsl(${(45 + gradShift * 30) % 360}, 100%, 70%)`);
+                textGrad.addColorStop(0.6, `hsl(${(300 + gradShift * 60) % 360}, 100%, 75%)`);
+                textGrad.addColorStop(1, `hsl(${(40 + gradShift * 30) % 360}, 100%, 70%)`);
+                ctx.fillStyle = textGrad;
+                ctx.fillText(feverText, textX, textY);
+
+                // テキストアウトライン（白+ゴールド）
+                ctx.shadowBlur = 0;
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
+                ctx.strokeText(feverText, textX, textY);
+
+                ctx.restore();
             }
 
             ctx.restore();
