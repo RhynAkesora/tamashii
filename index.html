@@ -51,6 +51,8 @@
             position: fixed; top: 0; left: 0; width: 0; height: 0; visibility: hidden;
             padding-top: env(safe-area-inset-top, 0px);
             padding-bottom: env(safe-area-inset-bottom, 0px);
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
         }
         
         canvas {
@@ -254,7 +256,10 @@
 
         // ゲーム設定
         const gridWidth = 9;
-        const gridHeight = 19; 
+        const gridHeight = 19;
+        let gameGridHeight = 0; // ゲームグリッドの実際の描画高さ（canvas.heightとは異なる場合がある）
+        let cachedSafeTop = 0; // セーフエリア上端キャッシュ（ノッチ/ステータスバー）
+        let cachedSafeBottom = 0; // セーフエリア下端キャッシュ（ホームインジケーター/ナビバー）
         const cellDivisions = 5;
         // 属性カラー: 火・水・風・地・光
         const colors = ['#E8423F', '#3B8ED0', '#3CC76A', '#D4A017', '#F0E6D3'];
@@ -862,11 +867,13 @@
             const containerWidth = window.innerWidth;
             const containerHeight = window.innerHeight;
 
-            // Safe Area Insets取得（iPhone ノッチ/Dynamic Island/ホームインジケーター）
+            // Safe Area Insets取得（全スマホ: ノッチ/パンチホール/ステータスバー/ナビバー）
             const safeHelper = document.getElementById('safeAreaHelper');
             const safeStyle = safeHelper ? getComputedStyle(safeHelper) : null;
             const safeTop = safeStyle ? parseInt(safeStyle.paddingTop, 10) || 0 : 0;
             const safeBottom = safeStyle ? parseInt(safeStyle.paddingBottom, 10) || 0 : 0;
+            cachedSafeTop = safeTop;
+            cachedSafeBottom = safeBottom;
 
             const scoreDisplayHeight = 30;
             const pauseButtonHeight = 32;
@@ -881,6 +888,7 @@
 
             // 非ゲーム画面（タイトル、PleaseTap等）では画面全体を使う
             if (!isGameScreen) {
+                gameGridHeight = 0;
                 canvas.width = containerWidth;
                 canvas.height = containerHeight;
                 canvas.style.width = `${containerWidth}px`;
@@ -893,7 +901,7 @@
                 return;
             }
 
-            const bottomMargin = Math.max(0, safeBottom);
+            const bottomMargin = 0; // ホームインジケーター領域にもコンテンツを拡張する
             const tempAvailableHeight = containerHeight - (topPageMargin + hudHeight + bottomMargin);
             const nextPieceWidth = Math.ceil(gridWidth * 0.3);
             const aspectRatio = (gridWidth + nextPieceWidth) / gridHeight;
@@ -912,11 +920,7 @@
 
             const totalContentHeight = calculatedCanvasHeight + hudHeight;
 
-            let startY = (containerHeight - totalContentHeight) / 2;
-
-            if (startY < topPageMargin) {
-                startY = topPageMargin;
-            }
+            let startY = topPageMargin; // 上寄せ配置（下部の黒い余白を最小化）
 
             let canvasTop;
             if (showHUD) {
@@ -947,8 +951,10 @@
 
             cellSize = Math.floor(Math.min(newWidth / (gridWidth + nextPieceWidth), newHeight / gridHeight));
             sandSize = cellSize / cellDivisions;
+            gameGridHeight = cellSize * gridHeight;
             canvas.width = cellSize * (gridWidth + nextPieceWidth);
-            canvas.height = cellSize * gridHeight;
+            // canvasをビューポート下端まで拡張し、黒い余白を除去
+            canvas.height = Math.max(gameGridHeight, Math.round(containerHeight - canvasTop));
 
             canvas.style.width = `${canvas.width}px`;
             canvas.style.height = `${canvas.height}px`;
@@ -999,11 +1005,13 @@
          * ゲームグリッドと砂粒子を描画する
          */
         function drawGrid() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const bgTheme = getCurrentBgTheme();
+            // canvas全体をゲーム背景色で塗りつぶし（拡張領域含む）
+            ctx.fillStyle = bgTheme.game;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             drawDesertBackground();
             const gameAreaWidth = cellSize * gridWidth;
-            const gameAreaHeight = canvas.height;
-            const bgTheme = getCurrentBgTheme();
+            const gameAreaHeight = gameGridHeight || canvas.height;
             ctx.fillStyle = bgTheme.game;
             ctx.fillRect(0, 0, gameAreaWidth, gameAreaHeight);
 
@@ -1055,7 +1063,7 @@
          */
         function drawGameAreaFrame() {
             const gw = cellSize * gridWidth;
-            const gh = canvas.height;
+            const gh = gameGridHeight || canvas.height;
             const theme = getCurrentBgTheme();
             const isWarm = (theme === bgThemes[0] || theme === bgThemes[1]);
 
@@ -1395,7 +1403,8 @@
                 cachedDesertKey = key;
             }
             ctx.fillStyle = cachedDesertGrad;
-            ctx.fillRect(nextAreaX, 0, nextAreaWidth, canvas.height);
+            const desertH = gameGridHeight || canvas.height;
+            ctx.fillRect(nextAreaX, 0, nextAreaWidth, desertH);
 
             // 夜・宇宙テーマ時に星を描画
             const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
@@ -1405,7 +1414,7 @@
                 for (let i = 0; i < starCount; i++) {
                     // 決定論的な擬似ランダム位置（フレームごとに動かない）
                     const sx = nextAreaX + ((i * 7919 + 31) % 100) / 100 * nextAreaWidth;
-                    const sy = ((i * 6271 + 17) % 100) / 100 * canvas.height;
+                    const sy = ((i * 6271 + 17) % 100) / 100 * desertH;
                     const twinkle = Math.sin(frameCount * 0.05 + i * 1.7) * 0.3 + 0.7;
                     ctx.globalAlpha = twinkle * (level >= 10 ? 0.9 : 0.5);
                     ctx.fillRect(sx, sy, 1.5, 1.5);
@@ -1703,7 +1712,7 @@
             const nPad = Math.floor(4 * Math.min(areaW / 80, 1));
             const nX = gameAreaWidth + nPad;
             const nW = areaW - nPad * 2;
-            const nH = canvas.height - nPad * 2;
+            const nH = (gameGridHeight || canvas.height) - nPad * 2;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
             ctx.fillRect(nX, nPad, nW, nH);
             const frameColor = isWarm ? 'rgba(180, 150, 80, 0.7)' : 'rgba(85, 102, 170, 0.7)';
@@ -1897,7 +1906,7 @@
             // ===== ヨガ行者（コンボエフェクト付き・シルエットマスク方式） =====
             if (yogaImage) {
                 const yogaTopY = curY;
-                const availableH = canvas.height - yogaTopY - nPad - 4;
+                const availableH = (gameGridHeight || canvas.height) - yogaTopY - nPad - 4;
                 const availableW = areaW - 20;
                 if (availableH > 30 && availableW > 30) {
                     const scale = Math.min(availableW / yogaImage.width, availableH / yogaImage.height, 1);
@@ -2278,7 +2287,7 @@
                 ctx.fillRect(pX * sandSize, pY * sandSize, sandSize, sandSize);
             }
             // SFC風スキャンライン（横方向に走る光の帯）
-            const scanY = progress * canvas.height;
+            const scanY = progress * (gameGridHeight || canvas.height);
             const scanH = 6;
             ctx.globalAlpha = alpha * 0.7;
             const scanGrad = ctx.createLinearGradient(0, scanY - scanH, 0, scanY + scanH);
@@ -2807,7 +2816,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.720', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.722', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3335,7 +3344,8 @@
         function getGearButtonRect() {
             const size = Math.max(32, Math.min(42, canvas.width * 0.09));
             const margin = 18;
-            return { x: canvas.width - size - margin, y: margin, w: size, h: size };
+            // セーフエリア上端を考慮（全スマホ: ノッチ/パンチホール/ステータスバー回避）
+            return { x: canvas.width - size - margin, y: margin + cachedSafeTop, w: size, h: size };
         }
 
         /**
@@ -4222,7 +4232,7 @@
                         const gAreaW = cellSize * gridWidth;
                         const nAreaW = canvas.width - gAreaW;
                         const yCenterX = gAreaW + nAreaW / 2;
-                        const yCenterY = canvas.height * 0.7;
+                        const yCenterY = (gameGridHeight || canvas.height) * 0.7;
                         for (let i = 0; i < 25; i++) {
                             visualEffects.push({
                                 x: yCenterX + (Math.random() - 0.5) * nAreaW * 0.6,
@@ -4390,7 +4400,7 @@
             // フィーバー演出
             if (isFever) {
                 const gameAreaWidth = cellSize * gridWidth;
-                const gameAreaH = canvas.height;
+                const gameAreaH = gameGridHeight || canvas.height;
                 const pulse = Math.sin(frameCount * 0.15) * 0.15 + 0.35;
                 const fastPulse = Math.sin(frameCount * 0.25) * 0.5 + 0.5;
 
