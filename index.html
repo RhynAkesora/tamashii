@@ -51,6 +51,8 @@
             position: fixed; top: 0; left: 0; width: 0; height: 0; visibility: hidden;
             padding-top: env(safe-area-inset-top, 0px);
             padding-bottom: env(safe-area-inset-bottom, 0px);
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
         }
         
         canvas {
@@ -256,6 +258,8 @@
         const gridWidth = 9;
         const gridHeight = 19;
         let gameGridHeight = 0; // ゲームグリッドの実際の描画高さ（canvas.heightとは異なる場合がある）
+        let cachedSafeTop = 0; // セーフエリア上端キャッシュ（ノッチ/ステータスバー）
+        let cachedSafeBottom = 0; // セーフエリア下端キャッシュ（ホームインジケーター/ナビバー）
         const cellDivisions = 5;
         // 属性カラー: 火・水・風・地・光
         const colors = ['#E8423F', '#3B8ED0', '#3CC76A', '#D4A017', '#F0E6D3'];
@@ -863,11 +867,13 @@
             const containerWidth = window.innerWidth;
             const containerHeight = window.innerHeight;
 
-            // Safe Area Insets取得（iPhone ノッチ/Dynamic Island/ホームインジケーター）
+            // Safe Area Insets取得（全スマホ: ノッチ/パンチホール/ステータスバー/ナビバー）
             const safeHelper = document.getElementById('safeAreaHelper');
             const safeStyle = safeHelper ? getComputedStyle(safeHelper) : null;
             const safeTop = safeStyle ? parseInt(safeStyle.paddingTop, 10) || 0 : 0;
             const safeBottom = safeStyle ? parseInt(safeStyle.paddingBottom, 10) || 0 : 0;
+            cachedSafeTop = safeTop;
+            cachedSafeBottom = safeBottom;
 
             const scoreDisplayHeight = 30;
             const pauseButtonHeight = 32;
@@ -2810,7 +2816,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.721', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.722', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3338,11 +3344,8 @@
         function getGearButtonRect() {
             const size = Math.max(32, Math.min(42, canvas.width * 0.09));
             const margin = 18;
-            // セーフエリア上端を考慮（ノッチ/Dynamic Island回避）
-            const safeHelper = document.getElementById('safeAreaHelper');
-            const safeStyle = safeHelper ? getComputedStyle(safeHelper) : null;
-            const safeTop = safeStyle ? parseInt(safeStyle.paddingTop, 10) || 0 : 0;
-            return { x: canvas.width - size - margin, y: margin + safeTop, w: size, h: size };
+            // セーフエリア上端を考慮（全スマホ: ノッチ/パンチホール/ステータスバー回避）
+            return { x: canvas.width - size - margin, y: margin + cachedSafeTop, w: size, h: size };
         }
 
         /**
