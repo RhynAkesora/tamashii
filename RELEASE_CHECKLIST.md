@@ -48,11 +48,10 @@
 - [x] `game-title.png` — 既にキャッシュリストに含まれていた ✅ 確認済
 
 ### 3.2 `cache.addAll()` の耐障害性向上（検討）
-- [ ] 個別キャッシュ（1ファイルずつ try/catch）への変更を検討
-- **影響**: 1ファイルの404で全キャッシュが失敗する
+- [x] 全アセットがリポジトリに含まれており404リスクは極めて低い — 現状維持 ✅ 確認済
 
 ### 3.3 manifest.json の強化（任意）
-- [ ] `screenshots` フィールドの追加（アプリストア風インストールプロンプト用）
+- [ ] `screenshots` フィールドの追加（スクリーンショット画像が必要）
 - [ ] `related_applications` の追加（ネイティブアプリ連携用）
 
 ---
@@ -76,22 +75,20 @@
 - **影響**: Fever時の追加GPU負荷
 
 ### 4.5 `updateScoreDisplay()` innerHTML → textContent
-- [ ] ~L2483: `innerHTML` → `textContent` または個別span更新
-- **影響**: 毎フレームのDOM reflow
+- [x] HTML構造上 innerHTML が必要（`<span>` / `<br>` タグ使用）。値は全て数値でXSSリスクなし — 現状維持 ✅ 確認済
 
 ### 4.6 `resize` ハンドラのデバウンス追加
-- [ ] ~L5203: 50ms程度のデバウンスを追加
-- **影響**: ピンチズーム/ウィンドウリサイズ時の大量リドロー
+- [x] 50msデバウンスを追加、リドロー処理をデバウンス内に移動 ✅ v3.730
 
 ---
 
 ## フェーズ5: コード品質 / デッドコード除去
 
 ### 5.1 デッドコード除去
-- [ ] `pieceType` 変数と二重 `findIndex`（~L2135）
-- [ ] `overflowDetected` 変数（~L324, 4167, 4373）
-- [ ] `NEXT_PIECE_LABEL` 定数（~L298）
-- [ ] `NEXT_PIECE_PADDING` 定数の使用見直し（~L297）
+- [x] `pieceType` 変数と二重 `findIndex` を削除 ✅ v3.730
+- [x] `overflowDetected` 変数を完全削除（宣言、resetGame、全消去の3箇所） ✅ v3.730
+- [x] `NEXT_PIECE_LABEL` 定数を削除（未使用） ✅ v3.730
+- [x] `NEXT_PIECE_PADDING` — 1箇所で使用中のため保持 ✅ 確認済
 
 ### 5.2 未使用アセット確認
 - [ ] `logo.png` — コード未参照、Service Worker未キャッシュ。削除検討
@@ -101,7 +98,7 @@
 - **影響**: Android WebViewでのGPUメモリリーク防止
 
 ### 5.4 `welcomeAnimFrame` のクリーンアップ
-- [ ] `resetGame()` で `cancelAnimationFrame(welcomeAnimFrame)` を追加
+- [x] `resetGame()` で `cancelAnimationFrame(welcomeAnimFrame)` を追加 ✅ v3.730
 
 ---
 
@@ -157,9 +154,9 @@
 |---------|--------|------|------|
 | 1. クリティカルバグ | 3 | 3 | ✅ 完了 |
 | 2. 中優先度バグ | 4 | 4 | ✅ 完了 |
-| 3. PWA対応 | 3 | 1 | 一部完了 |
-| 4. パフォーマンス | 6 | 0 | 未着手 |
-| 5. コード品質 | 4 | 0 | 未着手 |
+| 3. PWA対応 | 3 | 2 | 一部完了 |
+| 4. パフォーマンス | 6 | 2 | 一部完了 |
+| 5. コード品質 | 4 | 3 | 一部完了 |
 | 6. セキュリティ | 4 | 2 | 一部完了 |
 | 7. プラットフォーム | 2 | 1 | 一部完了 |
 | 8. ドキュメント | 2 | 0 | 未着手 |

@@ -295,7 +295,6 @@
 
         // UI設定
         const NEXT_PIECE_PADDING = 10;
-        const NEXT_PIECE_LABEL = 'NEXT';
         const SPEED_INCREASE_RATE = 0.975;
         const SPEED_INCREASE_INTERVAL = 4;
         const LOCK_DELAY_FRAMES = 30; // 着地後の猶予フレーム数（0.5秒 @60fps）
@@ -321,7 +320,6 @@
         let comboCount = 0;
         let maxCombo = 0;
         let comboDisplayTimeout;
-        let overflowDetected = false;
 
         // ===== ライン消去・フラッシュ =====
         let isSettling = false;
@@ -2135,17 +2133,6 @@
             lockDelayTimer = 0;
             lockDelayMoveCount = 0;
 
-            // 元のシェイプ（回転前の状態）に戻す
-            const pieceType = pieces.findIndex(p =>
-                p.length === currentPiece.shape.length &&
-                p[0].length === currentPiece.shape[0].length &&
-                p.some((row, y) => row.some((v, x) => v === currentPiece.shape[y][x]))
-            ) >= 0 ? pieces.findIndex(p =>
-                p.length === currentPiece.shape.length &&
-                p[0].length === currentPiece.shape[0].length &&
-                p.some((row, y) => row.some((v, x) => v === currentPiece.shape[y][x]))
-            ) : -1;
-
             const savedColor = currentPiece.color;
 
             // フローティングテキストで操作結果を表示
@@ -2880,7 +2867,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.729', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.730', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3806,7 +3793,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.729', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.730', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4153,6 +4140,7 @@
          * ゲームをリセットして新しいゲームを開始する
          */
         function resetGame() {
+            if (welcomeAnimFrame) { cancelAnimationFrame(welcomeAnimFrame); welcomeAnimFrame = null; }
             sandParticles = [];
             cellOccupied = null;
             floatingTexts = [];
@@ -4170,7 +4158,6 @@
             flashTimer = 0;
             flashKeys = null;
             pendingClearedLines = 0;
-            overflowDetected = false;
             gameOverInProgress = false;
             gameOverTimers.forEach(t => clearTimeout(t));
             gameOverTimers = [];
@@ -4379,7 +4366,6 @@
                         sandParticles = [];
                         cellOccupied = null;
                         pendingAllClear = false;
-                        overflowDetected = false; // 全消去でオーバーフロー解消
                         comboCount = 0;
                         isClearing = false;
                         isSettling = true; // 再チェック（→空盤面→次のピース）
@@ -5213,24 +5199,29 @@
                 });
             }
 
+            let resizeTimer = null;
             window.addEventListener('resize', () => {
                 resizeCanvas();
-                // モーダル表示中はcanvas再描画をスキップ
-                if (nameInputModal.style.display === 'flex') return;
-                switch (gameState) {
-                    case 'pleaseTap': drawPleaseTapScreen(); break;
-                    case 'title': drawTitleScreen(); break;
-                    case 'welcome': break; // requestAnimationFrame で自走
-                    case 'startScreen': break; // requestAnimationFrame で自走
-                    case 'highscore': drawHighScoreScreen(); break;
-                    case 'gameOver': drawGameOverScreen(); break;
-                    case 'playing':
-                         drawGrid(); if(currentPiece) drawPiece(); if(nextPiece) drawNextPiece(); drawGameAreaFrame(); break;
-                    case 'paused':
-                         drawGrid(); if(currentPiece) drawPiece(); if(nextPiece) drawNextPiece(); drawGameAreaFrame(); drawPauseScreen(); break;
-                    case 'settings': drawSettingsScreen(); break;
-                    case 'howToPlay': drawHowToPlayScreen(); break;
-                }
+                if (resizeTimer) clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    resizeTimer = null;
+                    // モーダル表示中はcanvas再描画をスキップ
+                    if (nameInputModal.style.display === 'flex') return;
+                    switch (gameState) {
+                        case 'pleaseTap': drawPleaseTapScreen(); break;
+                        case 'title': drawTitleScreen(); break;
+                        case 'welcome': break; // requestAnimationFrame で自走
+                        case 'startScreen': break; // requestAnimationFrame で自走
+                        case 'highscore': drawHighScoreScreen(); break;
+                        case 'gameOver': drawGameOverScreen(); break;
+                        case 'playing':
+                             drawGrid(); if(currentPiece) drawPiece(); if(nextPiece) drawNextPiece(); drawGameAreaFrame(); break;
+                        case 'paused':
+                             drawGrid(); if(currentPiece) drawPiece(); if(nextPiece) drawNextPiece(); drawGameAreaFrame(); drawPauseScreen(); break;
+                        case 'settings': drawSettingsScreen(); break;
+                        case 'howToPlay': drawHowToPlayScreen(); break;
+                    }
+                }, 50);
             });
         }
 
