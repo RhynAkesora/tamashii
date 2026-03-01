@@ -2816,7 +2816,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.722', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.723', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3631,6 +3631,11 @@
                 if (pauseButtonElement) pauseButtonElement.style.display = 'block';
                 resizeCanvas();
                 updateScoreDisplay();
+                // BGM安全ネット: バックグラウンド復帰後にBGMが停止している場合に再開
+                if (activeBGM && activeBGM.paused && !soundMuted) {
+                    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+                    activeBGM.play().catch(e => {});
+                }
                 gameStartTime = Date.now(); // カウントダウン後にプレイ時間計測開始
                 update();
                 return;
@@ -4883,6 +4888,12 @@
                 gameState = 'startScreen';
                 countdownLastNumber = -1;
                 startScreenTime = Date.now();
+                // バックグラウンド復帰後のAudioContext再開
+                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+                // BGMを再開（activeBGMはポーズ前のものが残っている）
+                if (activeBGM && !soundMuted) {
+                    activeBGM.play().catch(e => {});
+                }
                 drawStartScreen();
             }
         }
@@ -5107,7 +5118,9 @@
                     // どの状態でもBGMを一時停止
                     if (activeBGM && !activeBGM.paused) activeBGM.pause();
                 } else {
-                    // 復帰時: ポーズ中・設定中・遊び方中以外ならBGMを再開
+                    // 復帰時: AudioContextがsuspendされていたら再開（全端末共通）
+                    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+                    // ポーズ中・設定中・遊び方中以外ならBGMを再開
                     if (gameState !== 'paused' && gameState !== 'settings' && gameState !== 'howToPlay') {
                         if (activeBGM && !soundMuted) activeBGM.play().catch(e => {});
                     }
@@ -5120,6 +5133,8 @@
                         if (gameState === 'playing') togglePause();
                         if (activeBGM && !activeBGM.paused) activeBGM.pause();
                     } else {
+                        // 復帰時: AudioContextがsuspendされていたら再開
+                        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
                         if (gameState !== 'paused' && gameState !== 'settings' && gameState !== 'howToPlay') {
                             if (activeBGM && !soundMuted) activeBGM.play().catch(e => {});
                         }
