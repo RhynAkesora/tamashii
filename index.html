@@ -1698,6 +1698,7 @@
                         if (currentPiece.shape[sy][sx]) {
                             const nx = currentPiece.x + sx;
                             const ny = testY + sy;
+                            if (ny < 0) continue; // スポーン中: ボード上部はスキップ
                             if (ny >= gridHeight || cellOccupied.has(ny * gridWidth + nx)) break outer;
                         }
                     }
@@ -2056,6 +2057,7 @@
                     if (currentPiece.shape[y][x]) {
                         const newX = currentPiece.x + x + dx;
                         const newY = currentPiece.y + y + dy;
+                        if (newY < 0) continue; // スポーン中: ボード上部のセルはスキップ
                         if (newX < 0 || newX >= gridWidth || newY >= gridHeight ||
                             cellOccupied.has(newY * gridWidth + newX)) {
                             return false;
@@ -2294,14 +2296,14 @@
          * 連結成分が横幅全体に渡っているかチェックする
          */
         function isFullWidth(component) {
-            let minX = SAND_GRID_WIDTH;
-            let maxX = 0;
+            const columnsPresent = new Uint8Array(SAND_GRID_WIDTH);
             for (const key of component) {
-                const x = key % SAND_GRID_WIDTH;
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
+                columnsPresent[key % SAND_GRID_WIDTH] = 1;
             }
-            return maxX - minX + 1 >= SAND_GRID_WIDTH;
+            for (let i = 0; i < SAND_GRID_WIDTH; i++) {
+                if (!columnsPresent[i]) return false;
+            }
+            return true;
         }
 
         // ライン消去処理
@@ -2874,7 +2876,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.727', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.728', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3800,7 +3802,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.727', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.728', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5103,8 +5105,8 @@
                 lastTouchEndTime = Date.now();
                 const touch = e.changedTouches[0];
                 const rect = canvas.getBoundingClientRect();
-                const x = touch.clientX - rect.left;
-                const y = touch.clientY - rect.top;
+                const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+                const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
 
                 if (gameState === 'highscore') {
                     if (hsIsDragging) {
@@ -5156,8 +5158,8 @@
                 if (Date.now() - lastTouchEndTime < 500) return;
                 e.preventDefault();
                 const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
 
                 if (gameState === 'paused') {
                     handlePauseTap(x, y);
