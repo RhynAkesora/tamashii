@@ -831,21 +831,45 @@
             name = name.trim().slice(0, 10);
             if (name.length === 0) return t('anonymous');
 
-            // NGワードリスト（部分一致、大文字小文字無視）
-            const ngWords = [
-                'fuck','shit','ass','dick','pussy','bitch','cunt','nigger','nigga','fag',
-                'kill','die','death','rape','nazi','hitler','penis','sex','porn','hentai',
-                'しね','ころす','ころせ','くそ','うんこ','ちんこ','まんこ','おっぱい','きちがい',
-                '死ね','殺す','殺せ','糞','基地外','障害者','ガイジ'
-            ];
-            const lowerName = name.toLowerCase();
-            for (const ng of ngWords) {
-                if (lowerName.includes(ng)) return t('anonymous');
-            }
-
             // 制御文字・特殊Unicode（ゼロ幅文字等）を除去
             name = name.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '');
             if (name.length === 0) return t('anonymous');
+
+            // 正規化用: 全角→半角、カタカナ→ひらがな変換
+            function normalize(str) {
+                // 全角英数→半角
+                let s = str.replace(/[\uFF01-\uFF5E]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+                // カタカナ→ひらがな
+                s = s.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+                // 区切り文字（スペース、記号、ドット等）を除去
+                s = s.replace(/[\s._\-*!@#$%^&()=+~`|,/<>?;:'"\\]/g, '');
+                // リートスピーク変換
+                s = s.replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e')
+                     .replace(/4/g, 'a').replace(/5/g, 's').replace(/7/g, 't')
+                     .replace(/8/g, 'b').replace(/\$/g, 's').replace(/@/g, 'a');
+                return s.toLowerCase();
+            }
+
+            const normalized = normalize(name);
+
+            // 部分一致NGワード
+            const ngPartial = [
+                'fuck','fck','fuq','shit','sht','dick','pussy','bitch','btch',
+                'cunt','nigger','nigga','nigg','fagg','rape','nazi','hitler',
+                'penis','porn','hentai',
+                'しね','ころす','ころせ','くそ','くたばれ','うんこ','ちんこ','まんこ',
+                'おっぱい','きちがい',
+                '死ね','殺す','殺せ','糞','基地外','障害者','ガイジ'
+            ];
+            for (const ng of ngPartial) {
+                if (normalized.includes(ng)) return t('anonymous');
+            }
+
+            // 完全一致NGワード（短い単語の誤検知防止）
+            const ngExact = ['ass','sex','die','kill','fag'];
+            for (const ng of ngExact) {
+                if (normalized === ng) return t('anonymous');
+            }
 
             return name;
         }
@@ -2850,7 +2874,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.726', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.727', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3776,7 +3800,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.726', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.727', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
