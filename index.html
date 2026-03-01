@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>魂の共鳴 ～私を信じて～</title>
     
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com;
+        connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://*.firebaseapp.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://app-measurement.com;
+        img-src 'self' data: blob:;
+        media-src 'self';
+        style-src 'self' 'unsafe-inline';
+        font-src 'self';
+        frame-src https://accounts.google.com;
+    ">
     <meta name="description" content="魂のステージを上げるパズルゲーム - 魂の共鳴">
     <meta name="rating" content="general">
     <meta name="theme-color" content="#2c5aa0">
@@ -2816,7 +2826,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.724', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.725', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3742,7 +3752,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.724', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.725', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
