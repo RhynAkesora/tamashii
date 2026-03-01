@@ -824,16 +824,40 @@
         }
 
         /**
+         * プレイヤー名のコンテンツフィルタリング
+         */
+        function sanitizePlayerName(name) {
+            if (typeof name !== 'string') return t('anonymous');
+            name = name.trim().slice(0, 10);
+            if (name.length === 0) return t('anonymous');
+
+            // NGワードリスト（部分一致、大文字小文字無視）
+            const ngWords = [
+                'fuck','shit','ass','dick','pussy','bitch','cunt','nigger','nigga','fag',
+                'kill','die','death','rape','nazi','hitler','penis','sex','porn','hentai',
+                'しね','ころす','ころせ','くそ','うんこ','ちんこ','まんこ','おっぱい','きちがい',
+                '死ね','殺す','殺せ','糞','基地外','障害者','ガイジ'
+            ];
+            const lowerName = name.toLowerCase();
+            for (const ng of ngWords) {
+                if (lowerName.includes(ng)) return t('anonymous');
+            }
+
+            // 制御文字・特殊Unicode（ゼロ幅文字等）を除去
+            name = name.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '');
+            if (name.length === 0) return t('anonymous');
+
+            return name;
+        }
+
+        /**
          * ハイスコアをFirestoreに保存する
          */
         async function saveHighScore(playerName, finalScore, finalMaxCombo) {
             if (!db || !firebaseFirestore) return;
 
             // クライアント側バリデーション（Firestoreルールと整合）
-            if (typeof playerName !== 'string' || playerName.length === 0) {
-                playerName = t('anonymous');
-            }
-            playerName = playerName.slice(0, 10);
+            playerName = sanitizePlayerName(playerName);
             if (!Number.isFinite(finalScore) || finalScore <= 0) return;
             if (!Number.isFinite(finalMaxCombo) || finalMaxCombo < 0) return;
             finalScore = Math.floor(finalScore);
@@ -2826,7 +2850,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.725', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.726', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3752,7 +3776,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.725', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.726', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
