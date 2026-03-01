@@ -357,6 +357,8 @@
 
         // ===== ゲームオーバー・スコア =====
         let gameOverReady = false;
+        let gameOverInProgress = false;
+        let gameOverTimers = [];
         let rankPosition = 0;
         // localStorageキーを tamashii_ プレフィックスに統一（旧キーからの移行も対応）
         let personalBest = JSON.parse(localStorage.getItem('tamashii_personalBest') || localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
@@ -2495,6 +2497,8 @@
          * ゲームオーバー処理
          */
         async function gameOver() {
+            if (gameOverInProgress) return;
+            gameOverInProgress = true;
             stopSoftDrop();
             gameState = 'gameOver';
             gameOverReady = false;
@@ -2521,27 +2525,27 @@
                 await fetchHighScores();
 
                 if (score > 0 && (highScores.length < 20 || score > highScores[highScores.length - 1].score)) {
-                    setTimeout(() => {
+                    gameOverTimers.push(setTimeout(() => {
                         if (gameState === 'gameOver') playHighScoreBGM();
-                    }, 1000);
+                    }, 1000));
                     playerNameInput.value = '';
                     nameInputModal.style.display = 'flex';
                     playerNameInput.focus();
                 } else {
                     playGameOverBGMDelayed();
                     drawGameOverScreen();
-                    setTimeout(() => {
+                    gameOverTimers.push(setTimeout(() => {
                         gameOverReady = true;
                         if (gameState === 'gameOver') drawGameOverScreen();
-                    }, 1000);
+                    }, 1000));
                 }
             } else {
                 playGameOverBGMDelayed();
                 drawGameOverScreen();
-                setTimeout(() => {
+                gameOverTimers.push(setTimeout(() => {
                     gameOverReady = true;
                     if (gameState === 'gameOver') drawGameOverScreen();
-                }, 1000);
+                }, 1000));
             }
         }
 
@@ -2876,7 +2880,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.728', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.729', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -2984,7 +2988,7 @@
         function playGameOverBGM() { startBGM(gameoverBgmAudio); }
         function playGameOverBGMDelayed() {
             stopAllBGM();
-            setTimeout(() => { if (gameState === 'gameOver') playGameOverBGM(); }, GAMEOVER_BGM_DELAY);
+            gameOverTimers.push(setTimeout(() => { if (gameState === 'gameOver') playGameOverBGM(); }, GAMEOVER_BGM_DELAY));
         }
         function playHighScoreBGM() { startBGM(highScoreBgmAudio); }
         function playFeverBGM() { startBGM(feverBgmAudio); }
@@ -3802,7 +3806,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.728', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.729', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4167,6 +4171,9 @@
             flashKeys = null;
             pendingClearedLines = 0;
             overflowDetected = false;
+            gameOverInProgress = false;
+            gameOverTimers.forEach(t => clearTimeout(t));
+            gameOverTimers = [];
             frameCount = 0;
             yogaGlowLevel = 0;
             yogaGlowTimer = 0;
@@ -4995,10 +5002,10 @@
                 playGameOverBGM();
                 gameOverReady = false;
                 drawGameOverScreen();
-                setTimeout(() => {
+                gameOverTimers.push(setTimeout(() => {
                     gameOverReady = true;
                     if (gameState === 'gameOver') drawGameOverScreen();
-                }, 1000);
+                }, 1000));
             }
 
             submitScoreButton.addEventListener('click', async () => {
@@ -5019,7 +5026,11 @@
             canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 // マルチタッチを無視（1本指のみ受付）
-                if (e.touches.length > 1) return;
+                if (e.touches.length > 1) {
+                    isTouchHolding = false;
+                    if (softDropTimer) { clearTimeout(softDropTimer); softDropTimer = null; }
+                    return;
+                }
                 if (gameState === 'highscore') {
                     const touch = e.touches[0];
                     hsIsDragging = true;
