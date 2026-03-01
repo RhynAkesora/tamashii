@@ -2816,7 +2816,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.723', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.724', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3742,7 +3742,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.723', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.724', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5209,7 +5209,6 @@
             window.resetTutorial = function() {
                 localStorage.removeItem('tamashii_shown_tutorial');
                 shownTutorial = false;
-                console.log('初回起動フラグをリセットしました。リロードしてください。');
             };
         }
 
