@@ -3026,7 +3026,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.747', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.748', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4527,7 +4527,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.747', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.748', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -6078,8 +6078,8 @@
                 } else {
                     // 復帰時: AudioContextがsuspendされていたら再開（全端末共通）
                     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-                    // ポーズ中・設定中・遊び方中以外ならBGMを再開
-                    if (gameState !== 'paused' && gameState !== 'settings' && gameState !== 'howToPlay') {
+                    // ポーズ中以外ならBGMを再開（設定画面・遊び方画面でもBGMは継続）
+                    if (gameState !== 'paused') {
                         if (activeBGM && !soundMuted) activeBGM.play().catch(e => {});
                     }
                 }
@@ -6093,7 +6093,7 @@
                     } else {
                         // 復帰時: AudioContextがsuspendされていたら再開
                         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-                        if (gameState !== 'paused' && gameState !== 'settings' && gameState !== 'howToPlay') {
+                        if (gameState !== 'paused') {
                             if (activeBGM && !soundMuted) activeBGM.play().catch(e => {});
                         }
                     }
