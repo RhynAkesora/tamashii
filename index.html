@@ -453,8 +453,8 @@
                 sessionBack: 'タイトルに戻る',
                 // マインドフル初回オンボーディング
                 mindfulOnboard1Title: 'ちょっとひと息',
-                mindfulOnboard1Text: 'パズルゲームには\nただ遊ぶだけで\n気持ちが落ち着くような\n不思議な魅力があります。',
-                mindfulOnboard1Sub: '— パズルゲームが心を穏やかにする可能性に関する\nOxford大学の研究に着想を得て作りました —',
+                mindfulOnboard1Text: 'パズルゲームには\nひとつのことに意識を向け\n没頭できる\n不思議な魅力があります。',
+                mindfulOnboard1Sub: '— ただ砂を眺め、ブロックを置く\nその繰り返しの中に\n静けさがあります —',
                 mindfulOnboard2Title: 'マインドフルモードとは',
                 mindfulOnboard2Text: '一つのことに意識を向けること。\nそれが「マインドフル」です。\n\nゲームオーバーはありません。\nブロックが積み上がっても\n砂のように流れてリセットされます。\n\n焦らず、自分のペースで\n遊ぶことができます。',
                 mindfulOnboard3Title: '遊び方',
@@ -522,8 +522,8 @@
                 sessionBack: 'Back to Title',
                 // Mindful onboarding
                 mindfulOnboard1Title: 'Take a moment',
-                mindfulOnboard1Text: 'Puzzle games have a\nwonderful way of helping\nyou unwind and find\na moment of calm.',
-                mindfulOnboard1Sub: '— Inspired by research at the University of Oxford\non the potential of puzzle games to ease the mind —',
+                mindfulOnboard1Text: 'Puzzle games have a\nwonderful way of drawing\nyour attention to one thing.',
+                mindfulOnboard1Sub: '— Just watching the sand,\nplacing blocks —\nthere is stillness\nin the repetition —',
                 mindfulOnboard2Title: 'What is Mindful Mode?',
                 mindfulOnboard2Text: "Focusing on one thing\nin the present moment —\nthat is being \"mindful.\"\n\nThere's no game over.\nWhen blocks pile up,\nthey flow away like sand\nand reset.\n\nPlay at your own pace,\nwithout any pressure.",
                 mindfulOnboard3Title: 'How to Play',
@@ -2982,7 +2982,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.742', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.743', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3158,7 +3158,7 @@
             ctx.textAlign = 'center';
             const descY = btnY + btnH + 30;
             ctx.fillText(currentLang === 'ja' ? 'ゲームオーバーなし・タイマー制' : 'No game over - timed session', cx, descY);
-            ctx.fillText(currentLang === 'ja' ? '心を落ち着けて、砂と向き合おう' : 'Calm your mind, flow with the sand', cx, descY + descFs + 6);
+            ctx.fillText(currentLang === 'ja' ? '砂に意識を向ける時間を選ぼう' : 'Choose your time to focus on the sand', cx, descY + descFs + 6);
 
             // 戻るボタン
             const backBtnW = totalBtnW * 0.4;
@@ -4488,7 +4488,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.742', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.743', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
