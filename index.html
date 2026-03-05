@@ -431,6 +431,26 @@
                 personalBest: '自己ベスト',
                 newPersonalBest: '自己ベスト更新！',
                 retry: 'もう一度',
+                // モード選択
+                modeSelectTitle: 'モード選択',
+                modeClassic: 'クラシック',
+                modeMindful: 'マインドフル',
+                modeClassicDesc: 'スコアを競う通常モード',
+                modeMindfulDesc: '心を整える瞑想モード',
+                // タイマー選択
+                timerSelectTitle: 'セッション時間',
+                timerMin: '分',
+                // マインドフルHUD
+                mindfulTimer: '残り時間',
+                mindfulLines: '消去ライン',
+                // セッション完了
+                sessionComplete: 'セッション完了',
+                sessionLines: '消去ライン',
+                sessionResets: 'リセット回数',
+                sessionMaxCombo: '最大コンボ',
+                sessionTime: 'プレイ時間',
+                sessionMessage: 'お疲れさまでした。\n心が少し軽くなっていますように。',
+                sessionBack: 'タイトルに戻る',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -467,6 +487,26 @@
                 personalBest: 'Best',
                 newPersonalBest: 'New Personal Best!',
                 retry: 'Retry',
+                // Mode selection
+                modeSelectTitle: 'Select Mode',
+                modeClassic: 'Classic',
+                modeMindful: 'Mindful',
+                modeClassicDesc: 'Standard score attack',
+                modeMindfulDesc: 'Meditative relaxation',
+                // Timer selection
+                timerSelectTitle: 'Session Duration',
+                timerMin: 'min',
+                // Mindful HUD
+                mindfulTimer: 'Time Left',
+                mindfulLines: 'Lines',
+                // Session complete
+                sessionComplete: 'Session Complete',
+                sessionLines: 'Lines Cleared',
+                sessionResets: 'Resets',
+                sessionMaxCombo: 'Max Combo',
+                sessionTime: 'Play Time',
+                sessionMessage: 'Well done.\nMay your mind feel a little lighter.',
+                sessionBack: 'Back to Title',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -514,6 +554,24 @@
         const FEVER_MAX = FEVER_DURATION * 2; // 上限40秒
         const FEVER_COMBO_THRESHOLD = 3;  // 3コンボで発動
         let pendingAllClear = false;
+
+        // ===== マインドフルモード =====
+        let gameMode = 'classic';           // 'classic' | 'mindful'
+        let mindfulTimerDuration = 600;     // 秒（デフォルト10分）
+        let mindfulTimeRemaining = 600;     // 残り秒数
+        let mindfulLastTimerUpdate = 0;     // Date.now()
+        let mindfulTotalLines = 0;          // セッション消去ライン
+        let mindfulResetCount = 0;          // リセット回数
+        let mindfulMaxCombo = 0;            // セッション最大コンボ
+        let isMindfulResetting = false;     // リセットアニメ中
+        let mindfulResetFrame = 0;          // リセットアニメフレーム
+        const MINDFUL_RESET_DURATION = 90;  // 1.5秒 @60fps
+        let mindfulComboHue = 0;            // コンボ色変化用色相
+        let mindfulAmbientGain = null;      // 環境音ゲインノード
+        let mindfulAmbientSource = null;    // 環境音ソース
+        let mindfulBgmAudio = null;         // 専用BGM
+        let modeSelectButtons = [];         // モード選択ボタン座標
+        let timerSelectButtons = [];        // タイマー選択ボタン座標
 
         // ===== Firebase =====
         let db;
@@ -737,6 +795,11 @@
         // エフェクト生成ロジック
 
         function triggerScreenShake(intensity, duration) {
+            // マインドフルモードではシェイクを穏やかに
+            if (gameMode === 'mindful') {
+                intensity = Math.max(1, intensity * 0.3);
+                duration = Math.max(2, Math.floor(duration * 0.5));
+            }
             shakeIntensity = intensity;
             shakeDuration = duration;
         }
@@ -1930,18 +1993,22 @@
             ctx.fillText('LINES', centerX, curY + infoFontSmall);
             ctx.fillStyle = COLOR_GOLD;
             ctx.font = `bold ${infoFontLarge}px Arial`;
-            ctx.fillText(`${totalLinesCleared}`, centerX, curY + infoFontSmall + infoLineH);
+            ctx.fillText(`${gameMode === 'mindful' ? mindfulTotalLines : totalLinesCleared}`, centerX, curY + infoFontSmall + infoLineH);
             curY += infoFontSmall + infoLineH + 4;
             ctx.strokeStyle = divLineColor;
             ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
             curY += 4;
 
             // COMBO
-            ctx.fillStyle = isFever ? COLOR_FEVER : labelColor;
+            ctx.fillStyle = (gameMode !== 'mindful' && isFever) ? COLOR_FEVER : labelColor;
             ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText(isFever ? `FEVER ${Math.ceil(feverTimer / 60)}s` : 'COMBO', centerX, curY + infoFontSmall);
+            ctx.fillText((gameMode !== 'mindful' && isFever) ? `FEVER ${Math.ceil(feverTimer / 60)}s` : 'COMBO', centerX, curY + infoFontSmall);
             if (comboCount > 0) {
-                ctx.fillStyle = isFever ? COLOR_FEVER : comboCount >= 4 ? COLOR_FEVER : comboCount >= 2 ? '#ff6699' : COLOR_GOLD;
+                if (gameMode === 'mindful') {
+                    ctx.fillStyle = `hsl(${mindfulComboHue}, 70%, 70%)`;
+                } else {
+                    ctx.fillStyle = isFever ? COLOR_FEVER : comboCount >= 4 ? COLOR_FEVER : comboCount >= 2 ? '#ff6699' : COLOR_GOLD;
+                }
             } else {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             }
@@ -1952,14 +2019,25 @@
             ctx.beginPath(); ctx.moveTo(divLineX1, curY); ctx.lineTo(divLineX2, curY); ctx.stroke();
             curY += 4;
 
-            // LEVEL
-            const currentLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
-            ctx.fillStyle = labelColor;
-            ctx.font = `bold ${infoFontSmall}px Arial`;
-            ctx.fillText('LEVEL', centerX, curY + infoFontSmall);
-            ctx.fillStyle = '#88ccff';
-            ctx.font = `bold ${infoFontLarge}px Arial`;
-            ctx.fillText(`${currentLevel}`, centerX, curY + infoFontSmall + infoLineH);
+            // LEVEL (classic) / TIMER (mindful)
+            if (gameMode === 'mindful') {
+                ctx.fillStyle = '#80d8c0';
+                ctx.font = `bold ${infoFontSmall}px Arial`;
+                ctx.fillText('TIME', centerX, curY + infoFontSmall);
+                const mMin = Math.floor(mindfulTimeRemaining / 60);
+                const mSec = mindfulTimeRemaining % 60;
+                ctx.fillStyle = mindfulTimeRemaining <= 30 ? '#ff8888' : '#80d8c0';
+                ctx.font = `bold ${infoFontLarge}px Arial`;
+                ctx.fillText(`${mMin}:${mSec < 10 ? '0' : ''}${mSec}`, centerX, curY + infoFontSmall + infoLineH);
+            } else {
+                const currentLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
+                ctx.fillStyle = labelColor;
+                ctx.font = `bold ${infoFontSmall}px Arial`;
+                ctx.fillText('LEVEL', centerX, curY + infoFontSmall);
+                ctx.fillStyle = '#88ccff';
+                ctx.font = `bold ${infoFontLarge}px Arial`;
+                ctx.fillText(`${currentLevel}`, centerX, curY + infoFontSmall + infoLineH);
+            }
             curY += infoFontSmall + infoLineH + 6;
 
             // ===== ヨガ行者（コンボエフェクト付き・シルエットマスク方式） =====
@@ -2471,9 +2549,18 @@
          */
         let prevScoreText = '';
         function updateScoreDisplay() {
-            const text = `<span>${t('hudScore')}: ${score}</span>` +
-                `<span>${t('personalBest')}: ${personalBest.score.toLocaleString()}</span>` +
-                `<span>${t('hudSpeed')}: ${(30 / fallSpeed).toFixed(2)}x</span>`;
+            let text;
+            if (gameMode === 'mindful') {
+                const min = Math.floor(mindfulTimeRemaining / 60);
+                const sec = mindfulTimeRemaining % 60;
+                const timeStr = `${min}:${sec < 10 ? '0' : ''}${sec}`;
+                text = `<span>${t('mindfulTimer')}: ${timeStr}</span>` +
+                    `<span>${t('mindfulLines')}: ${mindfulTotalLines}</span>`;
+            } else {
+                text = `<span>${t('hudScore')}: ${score}</span>` +
+                    `<span>${t('personalBest')}: ${personalBest.score.toLocaleString()}</span>` +
+                    `<span>${t('hudSpeed')}: ${(30 / fallSpeed).toFixed(2)}x</span>`;
+            }
             if (text !== prevScoreText) {
                 prevScoreText = text;
                 scoreDisplayElement.innerHTML = text;
@@ -2867,7 +2954,295 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.730', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.731', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+        }
+
+        /**
+         * モード選択画面を描画する
+         */
+        function drawModeSelectScreen() {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+            const isSmallScreen = H < SMALL_SCREEN_THRESHOLD;
+
+            // 背景（タイトル画面と同じ深い青紫）
+            const gradient = ctx.createLinearGradient(0, 0, 0, H);
+            gradient.addColorStop(0, '#1a0a3a');
+            gradient.addColorStop(0.4, '#2c1860');
+            gradient.addColorStop(0.7, '#3a1a5a');
+            gradient.addColorStop(1, '#0a0820');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, W, H);
+
+            // 背景の星
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < 20; i++) {
+                const sx = ((i * 137 + 51) % 1000) / 1000 * W;
+                const sy = ((i * 211 + 89) % 1000) / 1000 * H;
+                ctx.globalAlpha = 0.3 + 0.3 * Math.abs(Math.sin(Date.now() * 0.001 + i * 1.7));
+                ctx.fillRect(sx, sy, 1.5, 1.5);
+            }
+            ctx.globalAlpha = 1.0;
+
+            // SFCウィンドウ
+            const winW = Math.min(W * 0.85, 350);
+            const winH = Math.min(H * 0.6, 400);
+            const winX = cx - winW / 2;
+            const winY = H * 0.18;
+            drawSFCWindow(winX, winY, winW, winH, 'purple');
+
+            // タイトル
+            const titleFs = isSmallScreen ? 18 : 22;
+            ctx.fillStyle = COLOR_GOLD;
+            ctx.font = `bold ${titleFs}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(255, 200, 0, 0.3)';
+            ctx.shadowBlur = 4;
+            ctx.fillText(t('modeSelectTitle'), cx, winY + 40);
+            ctx.shadowBlur = 0;
+
+            // ボタン配置
+            const btnW = winW * 0.7;
+            const btnH = Math.min(55, H * 0.08);
+            const btnX = cx - btnW / 2;
+            const descFs = isSmallScreen ? 11 : 13;
+
+            // クラシックモードボタン
+            const classicY = winY + 80;
+            drawSFCButton(btnX, classicY, btnW, btnH, t('modeClassic'), 'blue');
+            ctx.fillStyle = 'rgba(200, 200, 220, 0.7)';
+            ctx.font = `${descFs}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText(t('modeClassicDesc'), cx, classicY + btnH + 18);
+
+            // マインドフルモードボタン
+            const mindfulY = classicY + btnH + 45;
+            drawSFCButton(btnX, mindfulY, btnW, btnH, t('modeMindful'), 'green');
+            ctx.fillStyle = 'rgba(200, 220, 200, 0.7)';
+            ctx.font = `${descFs}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText(t('modeMindfulDesc'), cx, mindfulY + btnH + 18);
+
+            // 戻るボタン
+            const backBtnW = btnW * 0.5;
+            const backY = winY + winH - 55;
+            const backX = cx - backBtnW / 2;
+            drawSFCButton(backX, backY, backBtnW, btnH * 0.8, t('back'), 'gray');
+
+            // ボタン座標を保存
+            modeSelectButtons = [
+                { id: 'classic', x: btnX, y: classicY, w: btnW, h: btnH },
+                { id: 'mindful', x: btnX, y: mindfulY, w: btnW, h: btnH },
+                { id: 'back', x: backX, y: backY, w: backBtnW, h: btnH * 0.8 },
+            ];
+        }
+
+        /**
+         * モード選択画面のタップ処理
+         */
+        function handleModeSelectTap(x, y) {
+            for (const btn of modeSelectButtons) {
+                if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                    if (btn.id === 'classic') {
+                        gameMode = 'classic';
+                        resetGame();
+                    } else if (btn.id === 'mindful') {
+                        gameMode = 'mindful';
+                        gameState = 'timerSelect';
+                        drawTimerSelectScreen();
+                    } else if (btn.id === 'back') {
+                        gameState = 'title';
+                        drawTitleScreen();
+                    }
+                    return;
+                }
+            }
+        }
+
+        /**
+         * タイマー選択画面を描画する
+         */
+        function drawTimerSelectScreen() {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+            const isSmallScreen = H < SMALL_SCREEN_THRESHOLD;
+
+            // 背景（穏やかな深い緑〜青）
+            const gradient = ctx.createLinearGradient(0, 0, 0, H);
+            gradient.addColorStop(0, '#0a1a2a');
+            gradient.addColorStop(0.4, '#0c2838');
+            gradient.addColorStop(0.7, '#0a2030');
+            gradient.addColorStop(1, '#06101a');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, W, H);
+
+            // 背景の星（控えめ）
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < 15; i++) {
+                const sx = ((i * 173 + 37) % 1000) / 1000 * W;
+                const sy = ((i * 239 + 61) % 1000) / 1000 * H;
+                ctx.globalAlpha = 0.2 + 0.2 * Math.abs(Math.sin(Date.now() * 0.0008 + i * 2.1));
+                ctx.fillRect(sx, sy, 1.5, 1.5);
+            }
+            ctx.globalAlpha = 1.0;
+
+            // SFCウィンドウ
+            const winW = Math.min(W * 0.85, 350);
+            const winH = Math.min(H * 0.55, 360);
+            const winX = cx - winW / 2;
+            const winY = H * 0.2;
+            drawSFCWindow(winX, winY, winW, winH, 'purple');
+
+            // タイトル
+            const titleFs = isSmallScreen ? 18 : 22;
+            ctx.fillStyle = COLOR_GOLD;
+            ctx.font = `bold ${titleFs}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(255, 200, 0, 0.3)';
+            ctx.shadowBlur = 4;
+            ctx.fillText(t('timerSelectTitle'), cx, winY + 40);
+            ctx.shadowBlur = 0;
+
+            // タイマーボタン（3つ横並び）
+            const btnH = Math.min(55, H * 0.08);
+            const gap = 12;
+            const totalBtnW = winW * 0.8;
+            const singleBtnW = (totalBtnW - gap * 2) / 3;
+            const startX = cx - totalBtnW / 2;
+            const btnY = winY + 80;
+            const durations = [5, 10, 15];
+            const colors = ['green', 'blue', 'blue'];
+
+            timerSelectButtons = [];
+            for (let i = 0; i < 3; i++) {
+                const bx = startX + i * (singleBtnW + gap);
+                const label = `${durations[i]}${t('timerMin')}`;
+                drawSFCButton(bx, btnY, singleBtnW, btnH, label, colors[i]);
+                timerSelectButtons.push({
+                    id: `timer_${durations[i]}`,
+                    duration: durations[i] * 60,
+                    x: bx, y: btnY, w: singleBtnW, h: btnH
+                });
+            }
+
+            // 説明テキスト
+            const descFs = isSmallScreen ? 12 : 14;
+            ctx.fillStyle = 'rgba(180, 220, 200, 0.7)';
+            ctx.font = `${descFs}px Arial`;
+            ctx.textAlign = 'center';
+            const descY = btnY + btnH + 30;
+            ctx.fillText(currentLang === 'ja' ? 'ゲームオーバーなし・タイマー制' : 'No game over - timed session', cx, descY);
+            ctx.fillText(currentLang === 'ja' ? '心を落ち着けて、砂と向き合おう' : 'Calm your mind, flow with the sand', cx, descY + descFs + 6);
+
+            // 戻るボタン
+            const backBtnW = totalBtnW * 0.4;
+            const backY = winY + winH - 55;
+            const backX = cx - backBtnW / 2;
+            drawSFCButton(backX, backY, backBtnW, btnH * 0.8, t('back'), 'gray');
+            timerSelectButtons.push({ id: 'back', x: backX, y: backY, w: backBtnW, h: btnH * 0.8 });
+        }
+
+        /**
+         * タイマー選択画面のタップ処理
+         */
+        function handleTimerSelectTap(x, y) {
+            for (const btn of timerSelectButtons) {
+                if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                    if (btn.id === 'back') {
+                        gameState = 'modeSelect';
+                        drawModeSelectScreen();
+                    } else {
+                        mindfulTimerDuration = btn.duration;
+                        mindfulTimeRemaining = btn.duration;
+                        resetGame();
+                    }
+                    return;
+                }
+            }
+        }
+
+        /**
+         * セッション完了画面を描画する
+         */
+        function drawSessionCompleteScreen() {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+            const isSmallScreen = H < SMALL_SCREEN_THRESHOLD;
+
+            // 穏やかな深い青〜緑の背景
+            const gradient = ctx.createLinearGradient(0, 0, 0, H);
+            gradient.addColorStop(0, '#0a1a2a');
+            gradient.addColorStop(0.5, '#0c2838');
+            gradient.addColorStop(1, '#081828');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, W, H);
+
+            // 背景パーティクル（穏やかな光の粒）
+            for (let i = 0; i < 25; i++) {
+                const px = ((i * 173 + 37) % 1000) / 1000 * W;
+                const py = ((i * 239 + 61) % 1000) / 1000 * H;
+                const glow = 0.15 + 0.15 * Math.sin(Date.now() * 0.0006 + i * 1.3);
+                ctx.fillStyle = `rgba(100, 200, 180, ${glow})`;
+                ctx.beginPath();
+                ctx.arc(px, py, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // SFCウィンドウ
+            const winW = Math.min(W * 0.88, 380);
+            const winH = Math.min(H * 0.7, 450);
+            const winX = cx - winW / 2;
+            const winY = H * 0.12;
+            drawSFCWindow(winX, winY, winW, winH, 'purple');
+
+            // 「セッション完了」タイトル
+            const titleFs = isSmallScreen ? 20 : 26;
+            ctx.fillStyle = '#80d8c0';
+            ctx.font = `bold ${titleFs}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(100, 200, 180, 0.4)';
+            ctx.shadowBlur = 8;
+            ctx.fillText(t('sessionComplete'), cx, winY + 45);
+            ctx.shadowBlur = 0;
+
+            // 統計情報
+            const statFs = isSmallScreen ? 14 : 17;
+            const valFs = isSmallScreen ? 20 : 24;
+            const statStartY = winY + 85;
+            const statGap = isSmallScreen ? 50 : 60;
+
+            const stats = [
+                { label: t('sessionTime'), value: `${Math.floor(mindfulTimerDuration / 60)}:00` },
+                { label: t('sessionLines'), value: `${mindfulTotalLines}` },
+                { label: t('sessionResets'), value: `${mindfulResetCount}` },
+                { label: t('sessionMaxCombo'), value: `${mindfulMaxCombo}` },
+            ];
+
+            stats.forEach((stat, i) => {
+                const sy = statStartY + i * statGap;
+                ctx.fillStyle = 'rgba(180, 220, 200, 0.6)';
+                ctx.font = `${statFs}px Arial`;
+                ctx.fillText(stat.label, cx, sy);
+                ctx.fillStyle = '#e0f0e8';
+                ctx.font = `bold ${valFs}px Arial`;
+                ctx.fillText(stat.value, cx, sy + statFs + 6);
+            });
+
+            // メッセージ
+            const msgY = statStartY + stats.length * statGap + 10;
+            const msgFs = isSmallScreen ? 13 : 15;
+            ctx.fillStyle = 'rgba(200, 230, 220, 0.8)';
+            ctx.font = `${msgFs}px Arial`;
+            const msgLines = t('sessionMessage').split('\n');
+            msgLines.forEach((line, i) => {
+                ctx.fillText(line, cx, msgY + i * (msgFs + 6));
+            });
+
+            // 戻るボタン
+            const btnW = winW * 0.5;
+            const btnH = Math.min(45, H * 0.06);
+            const btnX = cx - btnW / 2;
+            const btnY = winY + winH - 55;
+            drawSFCButton(btnX, btnY, btnW, btnH, t('sessionBack'), 'green');
+            // ボタン座標を保存（sessionCompleteButtons）
+            timerSelectButtons = [{ id: 'sessionBack', x: btnX, y: btnY, w: btnW, h: btnH }];
         }
 
         /**
@@ -2949,11 +3324,90 @@
         }
 
         function stopAllBGM() {
-            [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio].forEach(a => {
+            [bgmAudio, spaceBgmAudio, titleBgmAudio, gameoverBgmAudio, highScoreBgmAudio, feverBgmAudio, mindfulBgmAudio].forEach(a => {
                 if (a && !a.paused) { a.pause(); a.currentTime = 0; }
             });
             stopFlashSound();
+            stopMindfulAmbient();
             activeBGM = null;
+        }
+
+        /**
+         * マインドフルモード: プロシージャル環境音（波の音）を生成・再生
+         */
+        function startMindfulAmbient() {
+            stopAllBGM();
+            if (!audioCtx || soundMuted) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // 専用BGMファイルがあればそちらを再生
+            if (!mindfulBgmAudio) {
+                mindfulBgmAudio = createBGMAudio('soul-mindful.mp3', true, 'Mindful BGM');
+            }
+            if (mindfulBgmAudio) {
+                try {
+                    mindfulBgmAudio.currentTime = 0;
+                    mindfulBgmAudio.volume = BGM_VOLUME;
+                    mindfulBgmAudio.play().catch(() => {});
+                    activeBGM = mindfulBgmAudio;
+                } catch(e) {}
+            }
+
+            // プロシージャル環境音（波の音レイヤー）
+            try {
+                // ホワイトノイズバッファ作成
+                const bufferSize = audioCtx.sampleRate * 2;
+                const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                mindfulAmbientSource = audioCtx.createBufferSource();
+                mindfulAmbientSource.buffer = noiseBuffer;
+                mindfulAmbientSource.loop = true;
+
+                // ローパスフィルタ（波の音感）
+                const lpFilter = audioCtx.createBiquadFilter();
+                lpFilter.type = 'lowpass';
+                lpFilter.frequency.value = 400;
+                lpFilter.Q.value = 1;
+
+                // LFOでフィルタ周波数を揺らす（波のうねり）
+                const lfo = audioCtx.createOscillator();
+                const lfoGain = audioCtx.createGain();
+                lfo.type = 'sine';
+                lfo.frequency.value = 0.15; // ゆっくりとした波
+                lfoGain.gain.value = 200;   // フィルタ周波数の揺れ幅
+                lfo.connect(lfoGain);
+                lfoGain.connect(lpFilter.frequency);
+                lfo.start();
+
+                // 音量（控えめ）
+                mindfulAmbientGain = audioCtx.createGain();
+                mindfulAmbientGain.gain.value = 0.06;
+
+                mindfulAmbientSource.connect(lpFilter);
+                lpFilter.connect(mindfulAmbientGain);
+                mindfulAmbientGain.connect(masterGain || audioCtx.destination);
+                mindfulAmbientSource.start();
+            } catch(e) {
+                // 環境音生成失敗（無視）
+            }
+        }
+
+        /**
+         * マインドフルモード: 環境音を停止
+         */
+        function stopMindfulAmbient() {
+            if (mindfulAmbientSource) {
+                try { mindfulAmbientSource.stop(); } catch(e) {}
+                mindfulAmbientSource = null;
+            }
+            if (mindfulAmbientGain) {
+                try { mindfulAmbientGain.disconnect(); } catch(e) {}
+                mindfulAmbientGain = null;
+            }
         }
 
         // レベルに応じたステージBGMを取得
@@ -3793,7 +4247,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.730', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.731', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4179,9 +4633,26 @@
             holdUsed = false;
             fallSpeed = 30;
             gameStartTime = Date.now();
+
+            // マインドフルモード初期化
+            if (gameMode === 'mindful') {
+                mindfulTimeRemaining = mindfulTimerDuration;
+                mindfulLastTimerUpdate = Date.now();
+                mindfulTotalLines = 0;
+                mindfulResetCount = 0;
+                mindfulMaxCombo = 0;
+                isMindfulResetting = false;
+                mindfulResetFrame = 0;
+                mindfulComboHue = 0;
+            }
+
             resizeCanvas();
 
-            playBGM();
+            if (gameMode === 'mindful') {
+                startMindfulAmbient();
+            } else {
+                playBGM();
+            }
 
             // 初回起動時: ウェルカム→設定画面（言語選択）→遊び方画面→ゲーム開始
             if (!shownTutorial) {
@@ -4208,6 +4679,64 @@
 
             frameCount++;
 
+            // マインドフルモード: タイマー更新
+            if (gameMode === 'mindful' && !isMindfulResetting) {
+                const now = Date.now();
+                if (now - mindfulLastTimerUpdate >= 1000) {
+                    mindfulTimeRemaining -= Math.floor((now - mindfulLastTimerUpdate) / 1000);
+                    mindfulLastTimerUpdate = now;
+                    if (mindfulTimeRemaining <= 0) {
+                        mindfulTimeRemaining = 0;
+                        gameState = 'sessionComplete';
+                        cancelAnimationFrame(gameLoop);
+                        stopAllBGM();
+                        stopMindfulAmbient();
+                        drawSessionCompleteScreen();
+                        return;
+                    }
+                }
+            }
+
+            // マインドフルモード: 砂崩しリセットアニメーション
+            if (isMindfulResetting) {
+                mindfulResetFrame++;
+                const progress = mindfulResetFrame / MINDFUL_RESET_DURATION;
+
+                if (mindfulResetFrame <= MINDFUL_RESET_DURATION) {
+                    // 砂を加速的に落下させる
+                    const extraSteps = Math.floor(progress * 5) + 1;
+                    for (let i = 0; i < extraSteps; i++) {
+                        simulateSand();
+                    }
+                    // 後半: 下から砂粒子を消していく（流れ落ちて消える演出）
+                    if (progress > 0.4) {
+                        const removeProgress = (progress - 0.4) / 0.6;
+                        const cutoffY = Math.floor(SAND_GRID_HEIGHT * (1 - removeProgress));
+                        sandParticles = sandParticles.filter(p => p.y < cutoffY);
+                        cellOccupied = null;
+                    }
+                } else {
+                    // アニメーション完了 → 盤面リセット
+                    sandParticles = [];
+                    cellOccupied = null;
+                    isMindfulResetting = false;
+                    mindfulResetFrame = 0;
+                    comboCount = 0;
+                    isSettling = false;
+                    isClearing = false;
+                    isFlashing = false;
+                    flashTimer = 0;
+                    flashKeys = null;
+                    currentPiece = createPiece();
+                    nextPiece = createPiece();
+                    nextPiece2 = createPiece();
+                    holdPiece = null;
+                    holdUsed = false;
+                }
+                // リセット中は描画処理まで飛ばす（ピース操作をスキップ）
+            }
+
+            if (!isMindfulResetting) {
             // ヨガエフェクトタイマー減算
             if (yogaGlowTimer > 0) {
                 yogaGlowTimer--;
@@ -4227,8 +4756,8 @@
                 }
             }
 
-            // レベル10到達時に宇宙BGMへ切り替え
-            if (currentStageBgm === bgmAudio && getStageBGM() === spaceBgmAudio && !isFever) {
+            // レベル10到達時に宇宙BGMへ切り替え（マインドフルモードでは無効）
+            if (gameMode !== 'mindful' && currentStageBgm === bgmAudio && getStageBGM() === spaceBgmAudio && !isFever) {
                 playBGM();
             }
 
@@ -4259,16 +4788,31 @@
 
                     if (comboCount > 1) {
                         const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1)) * feverMultiplier;
-                        score += comboBonus;
-                        showComboDisplay(comboCount, comboBonus);
+                        if (gameMode !== 'mindful') score += comboBonus;
+                        showComboDisplay(comboCount, gameMode === 'mindful' ? 0 : comboBonus);
                         triggerScreenShake(comboCount * 1.5, 15);
-                        addFloatingText(`+${comboBonus} COMBO${isFever ? ' x2' : ''}`, floatX, floatY - 20, isFever ? COLOR_FEVER : '#ff6699');
+                        if (gameMode === 'mindful') {
+                            addFloatingText(`${comboCount} COMBO`, floatX, floatY - 20, `hsl(${mindfulComboHue}, 70%, 70%)`);
+                        } else {
+                            addFloatingText(`+${comboBonus} COMBO${isFever ? ' x2' : ''}`, floatX, floatY - 20, isFever ? COLOR_FEVER : '#ff6699');
+                        }
                     }
-                    score += basePoints;
-                    addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? COLOR_FEVER : COLOR_GOLD);
+                    if (gameMode !== 'mindful') {
+                        score += basePoints;
+                        addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? COLOR_FEVER : COLOR_GOLD);
+                    } else {
+                        addFloatingText(`${clearedLines} LINE${clearedLines > 1 ? 'S' : ''}`, floatX, floatY, '#80d8c0');
+                    }
 
-                    // フィーバー発動・延長
-                    if (comboCount >= FEVER_COMBO_THRESHOLD && !isFever) {
+                    // フィーバー発動・延長（マインドフルモードでは無効→穏やかな色変化に置換）
+                    if (gameMode === 'mindful') {
+                        // コンボで色相シフト（穏やかな視覚フィードバック）
+                        if (comboCount >= 2) {
+                            mindfulComboHue = (mindfulComboHue + 30) % 360;
+                        }
+                        mindfulMaxCombo = Math.max(mindfulMaxCombo, comboCount);
+                        mindfulTotalLines += clearedLines;
+                    } else if (comboCount >= FEVER_COMBO_THRESHOLD && !isFever) {
                         // 新規発動: ベース20秒
                         isFever = true;
                         feverTimer = FEVER_DURATION;
@@ -4315,7 +4859,7 @@
                     totalLinesCleared += clearedLines;
                     const currentLinesTier = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL);
 
-                    if(currentLinesTier > prevLinesTier) {
+                    if(currentLinesTier > prevLinesTier && gameMode !== 'mindful') {
                         fallSpeed = Math.max(1, fallSpeed * SPEED_INCREASE_RATE);
                     }
 
@@ -4380,6 +4924,16 @@
                             }
                         }
                         if (topRowBlocked) {
+                            if (gameMode === 'mindful') {
+                                // マインドフルモード: 砂崩しリセット開始
+                                isMindfulResetting = true;
+                                mindfulResetFrame = 0;
+                                mindfulResetCount++;
+                                currentPiece = null;
+                                isClearing = false;
+                                isSettling = false;
+                                return;
+                            }
                             gameOver();
                             return;
                         }
@@ -4427,6 +4981,8 @@
                 }
             }
 
+            } // end if (!isMindfulResetting)
+
             // 描画処理
             ctx.save();
 
@@ -4455,8 +5011,8 @@
             updateAndDrawEffects();
             updateAndDrawFloatingTexts();
 
-            // フィーバー演出
-            if (isFever) {
+            // フィーバー演出（マインドフルモードでは無効）
+            if (isFever && gameMode !== 'mindful') {
                 const gameAreaWidth = cellSize * gridWidth;
                 const gameAreaH = gameGridHeight || canvas.height;
                 const pulse = Math.sin(frameCount * 0.15) * 0.15 + 0.35;
@@ -4563,6 +5119,17 @@
                 ctx.strokeText(feverText, textX, textY);
 
                 ctx.restore();
+            }
+
+            // マインドフルモード: リセットアニメーション中のオーバーレイ演出
+            if (isMindfulResetting) {
+                const gameAreaWidth = cellSize * gridWidth;
+                const gameAreaH = gameGridHeight || canvas.height;
+                const progress = mindfulResetFrame / MINDFUL_RESET_DURATION;
+                // 穏やかな青いオーバーレイが徐々に濃くなって薄くなる
+                const alpha = Math.sin(progress * Math.PI) * 0.15;
+                ctx.fillStyle = `rgba(100, 200, 220, ${alpha})`;
+                ctx.fillRect(0, 0, gameAreaWidth, gameAreaH);
             }
 
             ctx.restore();
@@ -4728,7 +5295,27 @@
                         await fetchHighScores();
                         if (gameState === 'highscore') drawHighScoreScreen(false);
                     } else {
-                        resetGame();
+                        gameState = 'modeSelect';
+                        drawModeSelectScreen();
+                    }
+                    break;
+                case 'modeSelect':
+                    handleModeSelectTap(x, y);
+                    break;
+                case 'timerSelect':
+                    handleTimerSelectTap(x, y);
+                    break;
+                case 'sessionComplete':
+                    // セッション完了画面のタップ処理
+                    for (const btn of timerSelectButtons) {
+                        if (btn.id === 'sessionBack' && x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                            gameMode = 'classic';
+                            stopMindfulAmbient();
+                            gameState = 'title';
+                            playTitleBGM();
+                            drawTitleScreen();
+                            break;
+                        }
                     }
                     break;
                 case 'highscore': {
@@ -4753,7 +5340,7 @@
                     const goBtns = getGameOverButtons(goStatY + 4 * 32 + 20, goW, goCx);
                     if (x >= goBtns.retry.x && x <= goBtns.retry.x + goBtns.retry.w &&
                         y >= goBtns.retry.y && y <= goBtns.retry.y + goBtns.retry.h) {
-                        // リトライ: 即座にゲーム再開
+                        // リトライ: 同じモードで即座にゲーム再開
                         stopAllBGM();
                         resetGame();
                     } else if (x >= goBtns.title.x && x <= goBtns.title.x + goBtns.title.w &&
@@ -4954,6 +5541,10 @@
         function quitToTitle() {
             gameState = 'title';
             cancelAnimationFrame(gameLoop);
+            if (gameMode === 'mindful') {
+                stopMindfulAmbient();
+            }
+            gameMode = 'classic';
             if (audioCtx) audioCtx.resume();
             scoreDisplayElement.style.display = 'none';
             if (pauseButtonElement) pauseButtonElement.style.display = 'none';
