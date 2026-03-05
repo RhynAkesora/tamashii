@@ -1654,6 +1654,7 @@
                 red:   { top: 'rgba(190, 50, 50, 0.85)', bot: 'rgba(110, 25, 25, 0.95)', border: 'rgba(220, 100, 100, 0.6)', hilight: 'rgba(255, 160, 160, 0.3)', shadow: 'rgba(60, 15, 15, 0.8)' },
                 green: { top: 'rgba(50, 160, 70, 0.85)', bot: 'rgba(25, 100, 40, 0.95)', border: 'rgba(90, 200, 110, 0.6)', hilight: 'rgba(160, 255, 180, 0.3)', shadow: 'rgba(15, 50, 20, 0.8)' },
                 gray:  { top: 'rgba(100, 100, 110, 0.85)', bot: 'rgba(55, 55, 65, 0.95)', border: 'rgba(140, 140, 160, 0.6)', hilight: 'rgba(200, 200, 220, 0.3)', shadow: 'rgba(30, 30, 40, 0.8)' },
+                gold:  { top: 'rgba(200, 165, 50, 0.85)', bot: 'rgba(140, 100, 20, 0.95)', border: 'rgba(230, 200, 100, 0.6)', hilight: 'rgba(255, 230, 150, 0.3)', shadow: 'rgba(70, 50, 10, 0.8)' },
             };
             const th = themes[baseColor] || themes.blue;
 
@@ -2981,7 +2982,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.738', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.739', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3751,7 +3752,7 @@
         function drawHighScoreButton() {
             const r = getHighScoreButtonRect();
             const isSmallScreen = canvas.height < SMALL_SCREEN_THRESHOLD;
-            drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'blue', isSmallScreen ? 14 : 16);
+            drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'gold', isSmallScreen ? 14 : 16);
         }
 
         /**
@@ -4480,7 +4481,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.738', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.739', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
