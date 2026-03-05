@@ -116,17 +116,18 @@
             box-shadow: inset 0 1px 0 rgba(255, 200, 200, 0.15), 0 2px 4px rgba(0, 0, 0, 0.4);
         }
         
-        #comboDisplay { 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
+        #comboDisplay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             font-size: 24px;
-            color: white; 
-            text-shadow: 2px 2px 4px black; 
-            display: none; 
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px black;
+            display: none;
             z-index: 20;
-            transition: all 0.1s ease-out;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.8s ease-out;
         }
         
         #nameInputModal {
@@ -332,6 +333,8 @@
         // ===== ロックディレイ・ソフトドロップ =====
         let lockDelayTimer = 0;
         let lockDelayMoveCount = 0;
+        let isHardDrop = false;
+        let levelUpFlashTimer = 0;
         let softDropTimer = null;
         let softDropInterval = null;
         let isSoftDropping = false;
@@ -583,6 +586,7 @@
         let shakeIntensity = 0;
         let yogaGlowLevel = 0;
         let yogaGlowTimer = 0;
+        let shootingStars = [];
         let yogaOffCanvas = null;
         let yogaOffCtx = null;
         let isFever = false;
@@ -592,6 +596,22 @@
         const FEVER_MAX = FEVER_DURATION * 2; // 上限40秒
         const FEVER_COMBO_THRESHOLD = 3;  // 3コンボで発動
         let pendingAllClear = false;
+
+        // ===== 画面遷移フェード =====
+        let fadeState = 'none'; // 'none' | 'fadeOut' | 'fadeIn'
+        let fadeAlpha = 0;
+        let fadeStartTime = 0;
+        const FADE_DURATION = 300; // ms
+        let fadeCallback = null;
+        let fadeRAF = null;
+
+        // ===== ボタン押下フィードバック =====
+        let pressedButtonId = null;
+        let pressedButtonTimer = null;
+
+        // ===== ゲームオーバーアニメーション =====
+        let gameOverAnimStart = 0;
+        let gameOverAnimRAF = null;
 
         // ===== マインドフルモード =====
         let gameMode = 'classic';           // 'classic' | 'mindful'
@@ -767,6 +787,23 @@
             noiseSource.stop(now + 0.1);
         }
 
+        function playLevelUpSound() {
+            if (!soundsEnabled || !audioCtx) return;
+            const now = audioCtx.currentTime;
+            [0, 0.1].forEach((delay, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = 600 + i * 200;
+                gain.gain.setValueAtTime(0.3, now + delay);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + delay);
+                osc.stop(now + delay + 0.3);
+            });
+        }
+
         function playClearSound(currentCombo) {
             if (!soundsEnabled || !audioCtx) return;
             const now = audioCtx.currentTime;
@@ -847,6 +884,49 @@
             shakeDuration = duration;
         }
 
+        function startScreenTransition(callback) {
+            if (fadeState !== 'none') {
+                // フェード中に新たな遷移が来たら即実行
+                if (fadeCallback) fadeCallback();
+                fadeCallback = null;
+            }
+            fadeState = 'fadeOut';
+            fadeAlpha = 0;
+            fadeStartTime = Date.now();
+            fadeCallback = callback;
+            if (!fadeRAF) fadeRAF = requestAnimationFrame(updateFade);
+        }
+
+        function updateFade() {
+            const elapsed = Date.now() - fadeStartTime;
+            if (fadeState === 'fadeOut') {
+                fadeAlpha = Math.min(1, elapsed / FADE_DURATION);
+                if (fadeAlpha >= 1) {
+                    fadeAlpha = 1;
+                    if (fadeCallback) fadeCallback();
+                    fadeCallback = null;
+                    fadeState = 'fadeIn';
+                    fadeStartTime = Date.now();
+                }
+            } else if (fadeState === 'fadeIn') {
+                fadeAlpha = 1 - Math.min(1, elapsed / FADE_DURATION);
+                if (fadeAlpha <= 0) {
+                    fadeState = 'none';
+                    fadeAlpha = 0;
+                    fadeRAF = null;
+                    return;
+                }
+            } else {
+                fadeRAF = null;
+                return;
+            }
+            ctx.globalAlpha = fadeAlpha;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1;
+            fadeRAF = requestAnimationFrame(updateFade);
+        }
+
         function updateAndDrawEffects() {
             ctx.globalCompositeOperation = 'lighter';
 
@@ -862,9 +942,19 @@
                 if (p.lifespan > 0) {
                     ctx.fillStyle = p.color;
                     ctx.globalAlpha = p.alpha;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
+                    if (p.rotation !== undefined) {
+                        p.rotation += p.rotationSpeed;
+                        p.size *= p.sizeDecay;
+                        ctx.save();
+                        ctx.translate(p.x, p.y);
+                        ctx.rotate(p.rotation);
+                        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                        ctx.restore();
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                     visualEffects[writeIdx++] = p;
                 }
             }
@@ -1191,7 +1281,7 @@
             }
 
             // SFC風グリッド線（元に戻す場合はこのブロックを削除）
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
             ctx.lineWidth = 0.5;
             ctx.beginPath();
             for (let x = 1; x < gridWidth; x++) {
@@ -1301,7 +1391,7 @@
                 ctx.fillStyle = cachedDangerGrad1;
                 ctx.fillRect(0, 0, gameAreaWidth, h);
             } else if (level === 2) {
-                // 危険: 濃い赤 + 点滅（グラデーションキャッシュ）
+                // 危険: 濃い赤 + 高速点滅（グラデーションキャッシュ）
                 const h2 = cellSize * 5;
                 if (cachedDangerGrad2Key !== h2) {
                     cachedDangerGrad2 = ctx.createLinearGradient(0, 0, 0, h2);
@@ -1309,18 +1399,25 @@
                     cachedDangerGrad2.addColorStop(1, 'rgba(255, 0, 0, 0)');
                     cachedDangerGrad2Key = h2;
                 }
-                const blink = Math.sin(frameCount * 0.3) * 0.5 + 0.5;
-                ctx.globalAlpha = 0.2 + blink * 0.25;
+                const blink = Math.sin(frameCount * 0.5) * 0.5 + 0.5;
+                ctx.globalAlpha = 0.25 + blink * 0.3;
                 ctx.fillStyle = cachedDangerGrad2;
                 ctx.fillRect(0, 0, gameAreaWidth, h2);
                 ctx.globalAlpha = 1.0;
 
-                // DANGERテキスト
-                ctx.globalAlpha = 0.4 + blink * 0.4;
+                // 赤い枠線（点滅）
+                ctx.globalAlpha = 0.3 + blink * 0.5;
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(1.5, 1.5, gameAreaWidth - 3, (gameGridHeight || canvas.height) - 3);
+                ctx.globalAlpha = 1.0;
+
+                // DANGERテキスト（拡大 + 点滅強化）
+                ctx.globalAlpha = 0.5 + blink * 0.5;
                 ctx.fillStyle = '#ff0000';
-                ctx.font = `bold ${Math.max(16, cellSize * 1.5)}px Arial`;
+                ctx.font = `bold ${Math.max(20, cellSize * 2)}px Arial`;
                 ctx.textAlign = 'center';
-                ctx.fillText(t('danger'), gameAreaWidth / 2, cellSize * 2);
+                ctx.fillText(t('danger'), gameAreaWidth / 2, cellSize * 2.5);
                 ctx.globalAlpha = 1.0;
             }
         }
@@ -1573,16 +1670,43 @@
             // 夜・宇宙テーマ時に星を描画
             const level = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
             if (level >= 7) {
-                const starCount = level >= 10 ? 30 : 15;
+                const starCount = level >= 10 ? 60 : 30;
                 ctx.fillStyle = '#ffffff';
                 for (let i = 0; i < starCount; i++) {
                     // 決定論的な擬似ランダム位置（フレームごとに動かない）
                     const sx = nextAreaX + ((i * 7919 + 31) % 100) / 100 * nextAreaWidth;
                     const sy = ((i * 6271 + 17) % 100) / 100 * desertH;
                     const twinkle = Math.sin(frameCount * 0.05 + i * 1.7) * 0.3 + 0.7;
-                    ctx.globalAlpha = twinkle * (level >= 10 ? 0.9 : 0.5);
-                    ctx.fillRect(sx, sy, 1.5, 1.5);
+                    ctx.globalAlpha = twinkle * (level >= 10 ? 1.0 : 0.7);
+                    const sz = ((i * 3) % 3 === 0) ? 2.5 : 1.5;
+                    ctx.fillRect(sx, sy, sz, sz);
                 }
+
+                // 流れ星（低確率生成、最大2個同時）
+                if (shootingStars.length < 2 && Math.random() < 0.005) {
+                    const life = 30 + Math.floor(Math.random() * 20);
+                    shootingStars.push({
+                        x: nextAreaX + Math.random() * nextAreaWidth,
+                        y: Math.random() * desertH * 0.4,
+                        vx: -(1.5 + Math.random() * 2),
+                        vy: 1.5 + Math.random() * 2,
+                        life: life,
+                        maxLife: life
+                    });
+                }
+                for (let i = shootingStars.length - 1; i >= 0; i--) {
+                    const s = shootingStars[i];
+                    s.x += s.vx; s.y += s.vy; s.life--;
+                    ctx.globalAlpha = (s.life / s.maxLife) * 0.8;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(s.x, s.y);
+                    ctx.lineTo(s.x - s.vx * 4, s.y - s.vy * 4);
+                    ctx.stroke();
+                    if (s.life <= 0) shootingStars.splice(i, 1);
+                }
+
                 ctx.globalAlpha = 1.0;
             }
         }
@@ -1655,7 +1779,8 @@
          * @param {string} baseColor - ベースカラー 'blue'|'red'|'green'|'gray'
          * @param {number} [fontSize] - フォントサイズ（省略時は自動）
          */
-        function drawSFCButton(x, y, w, h, label, baseColor, fontSize) {
+        function drawSFCButton(x, y, w, h, label, baseColor, fontSize, pressed) {
+            if (pressed) { y += 2; h -= 2; }
             const r = Math.min(6, h * 0.15); // 角丸
             const fs = fontSize || Math.min(20, h * 0.45);
             // 配色テーブル
@@ -1737,6 +1862,24 @@
             ctx.fillText(label, x + w / 2, y + h / 2);
             ctx.shadowBlur = 0;
             ctx.textBaseline = 'alphabetic';
+            // 押下時: 暗いオーバーレイ
+            if (pressed) {
+                ctx.globalAlpha = 0.25;
+                ctx.fillStyle = '#000';
+                // 角丸パスを再構築
+                ctx.beginPath();
+                ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+                ctx.arcTo(x + w, y, x + w, y + r, r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+                ctx.lineTo(x + r, y + h);
+                ctx.arcTo(x, y + h, x, y + h - r, r);
+                ctx.lineTo(x, y + r);
+                ctx.arcTo(x, y, x + r, y, r);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
         }
 
         /**
@@ -2122,6 +2265,18 @@
                         ctx.beginPath();
                         ctx.arc(yogaCenterX, yogaCenterY, haloSize, 0, Math.PI * 2);
                         ctx.fill();
+                        // 回転する光点（光輪の縁）
+                        const dotCount = level >= 4 ? 6 : 4;
+                        const rotAngle = frameCount * 0.04;
+                        for (let d = 0; d < dotCount; d++) {
+                            const angle = rotAngle + (d / dotCount) * Math.PI * 2;
+                            const dx = yogaCenterX + Math.cos(angle) * haloSize * 0.8;
+                            const dy = yogaCenterY + Math.sin(angle) * haloSize * 0.8;
+                            ctx.fillStyle = `rgba(${haloColor}, ${haloAlpha * 0.8})`;
+                            ctx.beginPath();
+                            ctx.arc(dx, dy, level >= 4 ? 3 : 2, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
                         ctx.restore();
                     }
 
@@ -2367,7 +2522,28 @@
                     }
                 }
             }
-            triggerScreenShake(2, 4);
+            // ハードドロップ衝撃波
+            if (isHardDrop) {
+                const waveY = (bottomY + 1) * cellSize;
+                const waveX = (impactCells.reduce((s, c) => s + c.gx, 0) / impactCells.length + 0.5) * cellSize;
+                for (let i = 0; i < 12; i++) {
+                    const dir = (i < 6) ? -1 : 1;
+                    visualEffects.push({
+                        x: waveX,
+                        y: waveY,
+                        vx: dir * (Math.random() * 4 + 2),
+                        vy: -(Math.random() * 1.5),
+                        color: pieceColor,
+                        alpha: 1.0,
+                        size: Math.random() * 2 + 1,
+                        lifespan: 20 + Math.floor(Math.random() * 10)
+                    });
+                }
+                triggerScreenShake(4, 6);
+                isHardDrop = false;
+            } else {
+                triggerScreenShake(2, 4);
+            }
             currentPiece = null;
             isSettling = true;
             comboCount = 0;
@@ -2526,7 +2702,7 @@
 
         function createEffectForComponent(component, colorMap) {
             for (const key of component) {
-                if (Math.random() < 0.1) {
+                if (Math.random() < 0.25) {
                     const pX = key % SAND_GRID_WIDTH;
                     const pY = (key - pX) / SAND_GRID_WIDTH;
                     // 砂の色を取得してカラフルなパーティクルを生成
@@ -2541,7 +2717,10 @@
                             color: particleColor,
                             alpha: 1.0,
                             size: Math.random() * 2 + 1,
-                            lifespan: 60
+                            lifespan: 60,
+                            rotation: Math.random() * Math.PI * 2,
+                            rotationSpeed: (Math.random() - 0.5) * 0.15,
+                            sizeDecay: 0.97 + Math.random() * 0.02
                         });
                     }
                 }
@@ -2685,6 +2864,7 @@
                     playerNameInput.focus();
                 } else {
                     playGameOverBGMDelayed();
+                    gameOverAnimStart = Date.now();
                     drawGameOverScreen();
                     gameOverTimers.push(setTimeout(() => {
                         gameOverReady = true;
@@ -2693,6 +2873,7 @@
                 }
             } else {
                 playGameOverBGMDelayed();
+                gameOverAnimStart = Date.now();
                 drawGameOverScreen();
                 gameOverTimers.push(setTimeout(() => {
                     gameOverReady = true;
@@ -3026,7 +3207,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.748', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.755', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4445,7 +4626,7 @@
 
             // サウンドトグルボタン（ラベル統合）
             drawSFCButton(btns.sound.x, btns.sound.y, btns.sound.w, btns.sound.h,
-                t('sound') + '  ' + (soundMuted ? 'OFF' : 'ON'), soundMuted ? 'gray' : 'green');
+                t('sound') + '  ' + (soundMuted ? 'OFF' : 'ON'), soundMuted ? 'gray' : 'green', null, pressedButtonId === 'sound');
 
             // 言語ラベル
             ctx.fillStyle = 'rgba(200, 180, 150, 0.7)';
@@ -4454,33 +4635,33 @@
 
             // 言語選択ボタン（2つ横並び: 選択中=green, 非選択=gray）
             drawSFCButton(btns.langJa.x, btns.langJa.y, btns.langJa.w, btns.langJa.h,
-                '日本語', currentLang === 'ja' ? 'green' : 'gray');
+                '日本語', currentLang === 'ja' ? 'green' : 'gray', null, pressedButtonId === 'langJa');
             drawSFCButton(btns.langEn.x, btns.langEn.y, btns.langEn.w, btns.langEn.h,
-                'English', currentLang === 'en' ? 'green' : 'gray');
+                'English', currentLang === 'en' ? 'green' : 'gray', null, pressedButtonId === 'langEn');
 
             // 遊び方ボタン（初回設定では非表示）
             if (btns.howToPlay.y >= 0) {
                 drawSFCButton(btns.howToPlay.x, btns.howToPlay.y, btns.howToPlay.w, btns.howToPlay.h,
-                    t('howToPlay'), 'blue');
+                    t('howToPlay'), 'blue', null, pressedButtonId === 'howToPlay');
             }
 
             // マインドフルモードとはボタン（初回設定では非表示）
             if (btns.mindfulInfo.y >= 0) {
                 drawSFCButton(btns.mindfulInfo.x, btns.mindfulInfo.y, btns.mindfulInfo.w, btns.mindfulInfo.h,
-                    t('mindfulInfo'), 'green');
+                    t('mindfulInfo'), 'green', null, pressedButtonId === 'mindfulInfo');
             }
 
             // お問い合わせボタン（初回設定では非表示）
             if (btns.contact.y >= 0) {
                 drawSFCButton(btns.contact.x, btns.contact.y, btns.contact.w, btns.contact.h,
-                    t('contact'), 'blue');
+                    t('contact'), 'blue', null, pressedButtonId === 'contact');
             }
 
             // 戻る/進むボタン
             if (settingsReturnTo === 'playing' && !shownTutorial) {
-                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('proceed'), 'green');
+                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('proceed'), 'green', null, pressedButtonId === 'back');
             } else {
-                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('back'), 'red');
+                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('back'), 'red', null, pressedButtonId === 'back');
             }
 
             // プライバシーポリシー・利用規約テキストリンク
@@ -4527,7 +4708,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.748', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.755', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4536,37 +4717,40 @@
          * セッティング画面のタップ処理
          */
         function handleSettingsTap(x, y) {
+            if (pressedButtonId) return; // 押下アニメ中は無視
             const btns = getSettingsButtons();
             const hit = (b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
 
+            // ボタン押下フィードバックヘルパー
+            const pressAndDo = (id, action) => {
+                pressedButtonId = id;
+                drawSettingsScreen();
+                clearTimeout(pressedButtonTimer);
+                pressedButtonTimer = setTimeout(() => { pressedButtonId = null; action(); }, 80);
+            };
+
             if (hit(btns.sound)) {
-                toggleSound();
-                drawSettingsScreen();
+                pressAndDo('sound', () => { toggleSound(); drawSettingsScreen(); });
             } else if (hit(btns.langJa) && currentLang !== 'ja') {
-                currentLang = 'ja';
-                saveSettings();
-                updateHTMLText();
-                prevScoreText = '';
-                updateScoreDisplay();
-                drawSettingsScreen();
+                pressAndDo('langJa', () => {
+                    currentLang = 'ja'; saveSettings(); updateHTMLText();
+                    prevScoreText = ''; updateScoreDisplay(); drawSettingsScreen();
+                });
             } else if (hit(btns.langEn) && currentLang !== 'en') {
-                currentLang = 'en';
-                saveSettings();
-                updateHTMLText();
-                prevScoreText = '';
-                updateScoreDisplay();
-                drawSettingsScreen();
+                pressAndDo('langEn', () => {
+                    currentLang = 'en'; saveSettings(); updateHTMLText();
+                    prevScoreText = ''; updateScoreDisplay(); drawSettingsScreen();
+                });
             } else if (hit(btns.howToPlay) && btns.howToPlay.y >= 0) {
-                howToPlayReturnTo = 'settings';
-                howToPlayShownAt = Date.now();
-                gameState = 'howToPlay';
-                drawHowToPlayScreen();
+                pressAndDo('howToPlay', () => {
+                    howToPlayReturnTo = 'settings'; howToPlayShownAt = Date.now();
+                    gameState = 'howToPlay'; drawHowToPlayScreen();
+                });
             } else if (btns.mindfulInfo.y >= 0 && hit(btns.mindfulInfo)) {
-                // マインドフルモードの説明を表示（オンボーディング画面を再利用）
-                mindfulOnboardPage = 0;
-                gameState = 'mindfulOnboard';
-                mindfulOnboardReturnTo = 'settings';
-                drawMindfulOnboardScreen();
+                pressAndDo('mindfulInfo', () => {
+                    mindfulOnboardPage = 0; gameState = 'mindfulOnboard';
+                    mindfulOnboardReturnTo = 'settings'; drawMindfulOnboardScreen();
+                });
             } else if (btns.privacyLink.y >= 0 && hit(btns.privacyLink)) {
                 const privacyUrl = currentLang === 'en'
                     ? 'https://nullpoworks.github.io/privacy-policy-en.html'
@@ -4578,23 +4762,23 @@
                     : 'https://nullpoworks.github.io/terms-tamashii.html';
                 window.open(termsUrl, '_blank');
             } else if (hit(btns.contact) && btns.contact.y >= 0) {
-                window.open('https://nullpoworks.github.io/contact.html', '_blank');
+                pressAndDo('contact', () => {
+                    window.open('https://nullpoworks.github.io/contact.html', '_blank');
+                    pressedButtonId = null; drawSettingsScreen();
+                });
             } else if (hit(btns.back)) {
-                if (settingsReturnTo === 'playing' && !shownTutorial) {
-                    // 初回: 設定→遊び方画面→ゲーム開始
-                    shownTutorial = true;
-                    localStorage.setItem('tamashii_shown_tutorial', '1');
-                    howToPlayReturnTo = 'playing';
-                    howToPlayShownAt = Date.now();
-                    gameState = 'howToPlay';
-                    drawHowToPlayScreen();
-                } else if (settingsReturnTo === 'paused') {
-                    gameState = 'paused';
-                    drawPauseScreen();
-                } else {
-                    gameState = 'title';
-                    drawTitleScreen();
-                }
+                pressAndDo('back', () => {
+                    if (settingsReturnTo === 'playing' && !shownTutorial) {
+                        shownTutorial = true;
+                        localStorage.setItem('tamashii_shown_tutorial', '1');
+                        howToPlayReturnTo = 'playing'; howToPlayShownAt = Date.now();
+                        gameState = 'howToPlay'; drawHowToPlayScreen();
+                    } else if (settingsReturnTo === 'paused') {
+                        startScreenTransition(() => { gameState = 'paused'; drawPauseScreen(); });
+                    } else {
+                        startScreenTransition(() => { gameState = 'title'; drawTitleScreen(); });
+                    }
+                });
             }
         }
 
@@ -4746,6 +4930,12 @@
          */
         function drawGameOverScreen() {
             const W = canvas.width, H = canvas.height, cx = W / 2;
+            const animElapsed = gameOverAnimStart > 0 ? Date.now() - gameOverAnimStart : 9999;
+            // フェードインヘルパー（200msかけて0→1）
+            const elemAlpha = (startMs) => {
+                if (animElapsed < startMs) return 0;
+                return Math.min(1, (animElapsed - startMs) / 200);
+            };
 
             // SFC風背景
             const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -4764,60 +4954,76 @@
             const baseY = winY + winH * 0.12;
             ctx.textAlign = 'center';
 
-            // タイトル（赤 + グロー）
-            ctx.fillStyle = '#ff4444';
-            ctx.font = 'bold 28px Arial';
-            ctx.shadowColor = 'rgba(255, 50, 50, 0.5)';
-            ctx.shadowBlur = 8;
-            ctx.fillText(t('gameOver'), cx, baseY);
-            ctx.shadowBlur = 0;
-
-            // 装飾ライン
-            ctx.strokeStyle = 'rgba(192, 160, 64, 0.4)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(cx - 100, baseY + 12); ctx.lineTo(cx + 100, baseY + 12);
-            ctx.stroke();
-
-            // スコア（大きく強調）
-            ctx.fillStyle = COLOR_GOLD;
-            ctx.font = 'bold 36px Arial';
-            ctx.shadowColor = 'rgba(255, 200, 0, 0.4)';
-            ctx.shadowBlur = 6;
-            ctx.fillText(`${score.toLocaleString()}`, cx, baseY + 55);
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = 'rgba(200, 180, 140, 0.5)';
-            ctx.font = '14px Arial';
-            ctx.fillText(t('scoreLabel'), cx, baseY + 75);
-
-            // ランクイン表示
-            if (rankPosition > 0) {
-                ctx.fillStyle = '#ff88ff';
-                ctx.font = 'bold 18px Arial';
-                ctx.shadowColor = 'rgba(255, 100, 255, 0.5)';
-                ctx.shadowBlur = 6;
-                const rankText = currentLang === 'ja'
-                    ? `${rankPosition}${t('rankIn')}`
-                    : `#${rankPosition}${t('rankIn')}`;
-                ctx.fillText(rankText, cx, baseY + 95);
+            // タイトル（赤 + グロー）: 0ms～
+            const titleAlpha = elemAlpha(0);
+            if (titleAlpha > 0) {
+                ctx.globalAlpha = titleAlpha;
+                ctx.fillStyle = '#ff4444';
+                ctx.font = 'bold 28px Arial';
+                ctx.shadowColor = 'rgba(255, 50, 50, 0.5)';
+                ctx.shadowBlur = 8;
+                ctx.fillText(t('gameOver'), cx, baseY);
                 ctx.shadowBlur = 0;
+
+                // 装飾ライン
+                ctx.strokeStyle = 'rgba(192, 160, 64, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx - 100, baseY + 12); ctx.lineTo(cx + 100, baseY + 12);
+                ctx.stroke();
             }
 
-            // 自己ベスト更新表示
+            // スコア（大きく強調）: 200ms～
+            const scoreAlpha = elemAlpha(200);
+            if (scoreAlpha > 0) {
+                ctx.globalAlpha = scoreAlpha;
+                ctx.fillStyle = COLOR_GOLD;
+                ctx.font = 'bold 36px Arial';
+                ctx.shadowColor = 'rgba(255, 200, 0, 0.4)';
+                ctx.shadowBlur = 6;
+                ctx.fillText(`${score.toLocaleString()}`, cx, baseY + 55);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(200, 180, 140, 0.5)';
+                ctx.font = '14px Arial';
+                ctx.fillText(t('scoreLabel'), cx, baseY + 75);
+            }
+
+            // ランクイン表示: 400ms～
+            if (rankPosition > 0) {
+                const rankAlpha = elemAlpha(400);
+                if (rankAlpha > 0) {
+                    ctx.globalAlpha = rankAlpha;
+                    ctx.fillStyle = '#ff88ff';
+                    ctx.font = 'bold 18px Arial';
+                    ctx.shadowColor = 'rgba(255, 100, 255, 0.5)';
+                    ctx.shadowBlur = 6;
+                    const rankText = currentLang === 'ja'
+                        ? `${rankPosition}${t('rankIn')}`
+                        : `#${rankPosition}${t('rankIn')}`;
+                    ctx.fillText(rankText, cx, baseY + 95);
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            // 自己ベスト更新表示: 500ms～
             let personalBestOffset = 0;
             if (isNewPersonalBest) {
+                const pbAlpha = elemAlpha(500);
                 const pbY = baseY + (rankPosition > 0 ? 115 : 100);
-                ctx.fillStyle = '#ffdd44';
-                ctx.font = 'bold 20px Arial';
-                ctx.textAlign = 'center';
-                ctx.shadowColor = 'rgba(255, 220, 50, 0.7)';
-                ctx.shadowBlur = 10;
-                ctx.fillText(t('newPersonalBest'), cx, pbY);
-                ctx.shadowBlur = 0;
+                if (pbAlpha > 0) {
+                    ctx.globalAlpha = pbAlpha;
+                    ctx.fillStyle = '#ffdd44';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(255, 220, 50, 0.7)';
+                    ctx.shadowBlur = 10;
+                    ctx.fillText(t('newPersonalBest'), cx, pbY);
+                    ctx.shadowBlur = 0;
+                }
                 personalBestOffset = 25;
             }
 
-            // 統計情報
+            // 統計情報: 600ms～（各行100msずらし）
             const statY = baseY + (rankPosition > 0 ? 125 : 110) + personalBestOffset;
             const lineH = 32;
             const finalLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
@@ -4833,6 +5039,9 @@
             ];
 
             for (let i = 0; i < stats.length; i++) {
+                const sAlpha = elemAlpha(600 + i * 100);
+                if (sAlpha <= 0) continue;
+                ctx.globalAlpha = sAlpha;
                 const y = statY + i * lineH;
                 ctx.fillStyle = 'rgba(200, 180, 150, 0.6)';
                 ctx.font = '15px Arial';
@@ -4844,11 +5053,27 @@
                 ctx.fillText(stats[i].value, cx + 10, y);
             }
 
-            // ボタン群（SFC風）
+            // ボタン群（SFC風）: 1200ms～
             if (gameOverReady) {
-                const btns = getGameOverButtons(statY + stats.length * lineH + 20, W, cx);
-                drawSFCButton(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h, t('retry'), 'red');
-                drawSFCButton(btns.title.x, btns.title.y, btns.title.w, btns.title.h, t('returnToTitle'), 'blue');
+                const btnAlpha = elemAlpha(1200);
+                if (btnAlpha > 0) {
+                    ctx.globalAlpha = btnAlpha;
+                    const btns = getGameOverButtons(statY + stats.length * lineH + 20, W, cx);
+                    drawSFCButton(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h, t('retry'), 'red', null, pressedButtonId === 'go_retry');
+                    drawSFCButton(btns.title.x, btns.title.y, btns.title.w, btns.title.h, t('returnToTitle'), 'blue', null, pressedButtonId === 'go_title');
+                }
+            }
+
+            ctx.globalAlpha = 1;
+
+            // アニメーション自走: 全要素表示完了まで再描画を繰り返す
+            if (gameOverAnimStart > 0 && animElapsed < 1500 && gameState === 'gameOver') {
+                if (gameOverAnimRAF) cancelAnimationFrame(gameOverAnimRAF);
+                gameOverAnimRAF = requestAnimationFrame(() => {
+                    if (gameState === 'gameOver') drawGameOverScreen();
+                });
+            } else {
+                gameOverAnimRAF = null;
             }
         }
 
@@ -4874,6 +5099,9 @@
             cellOccupied = null;
             floatingTexts = [];
             visualEffects = [];
+            shootingStars = [];
+            levelUpFlashTimer = 0;
+            isHardDrop = false;
             score = 0;
             comboCount = 0;
             maxCombo = 0;
@@ -5136,6 +5364,28 @@
 
                     if(currentLinesTier > prevLinesTier && gameMode !== 'mindful') {
                         fallSpeed = Math.max(1, fallSpeed * SPEED_INCREASE_RATE);
+
+                        // レベルアップ演出
+                        const newLevel = currentLinesTier + 1;
+                        const lvAreaW = cellSize * gridWidth;
+                        const lvAreaH = gameGridHeight || canvas.height;
+                        addFloatingText(`LEVEL ${newLevel}!`, lvAreaW / 2, lvAreaH * 0.4, '#88ccff');
+                        levelUpFlashTimer = 15;
+                        for (let i = 0; i < 16; i++) {
+                            const fromLeft = i < 8;
+                            visualEffects.push({
+                                x: fromLeft ? 0 : lvAreaW,
+                                y: Math.random() * lvAreaH,
+                                vx: (fromLeft ? 1 : -1) * (Math.random() * 3 + 2),
+                                vy: (Math.random() - 0.5) * 2,
+                                color: '#88ccff',
+                                alpha: 1.0,
+                                size: Math.random() * 2 + 1.5,
+                                lifespan: 40 + Math.floor(Math.random() * 20)
+                            });
+                        }
+                        triggerScreenShake(3, 8);
+                        playLevelUpSound();
                     }
 
                     isSettling = true;
@@ -5290,6 +5540,15 @@
             if (isFlashing) drawFlashEffect();
             const dangerLevel = getDangerLevel();
             if (dangerLevel > 0) drawDangerWarning(dangerLevel);
+            // レベルアップフラッシュ
+            if (levelUpFlashTimer > 0) {
+                const flashAlpha = levelUpFlashTimer / 15 * 0.3;
+                ctx.globalAlpha = flashAlpha;
+                ctx.fillStyle = '#88ccff';
+                ctx.fillRect(0, 0, cellSize * gridWidth, gameGridHeight || canvas.height);
+                ctx.globalAlpha = 1.0;
+                levelUpFlashTimer--;
+            }
             if (currentPiece && !isSettling && !isClearing && !isFlashing) {
                 drawGhostPiece();
                 drawPiece();
@@ -5431,13 +5690,16 @@
         function showComboDisplay(count, bonus) {
             comboDisplayElement.innerHTML = `${count} COMBO!<br>+${bonus}`;
             comboDisplayElement.style.display = 'block';
-            comboDisplayElement.style.transform = 'translate(-50%, -50%) scale(1.5)';
+            comboDisplayElement.style.transition = 'none';
+            const bounceScale = Math.min(1.8 + count * 0.1, 2.5);
+            comboDisplayElement.style.transform = `translate(-50%, -50%) scale(${bounceScale}) translateY(-10px)`;
             comboDisplayElement.style.opacity = '1';
 
             setTimeout(() => {
-                comboDisplayElement.style.transform = 'translate(-50%, -50%) scale(1)';
+                comboDisplayElement.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.8s ease-out';
+                comboDisplayElement.style.transform = 'translate(-50%, -50%) scale(1) translateY(0)';
                 comboDisplayElement.style.opacity = '0';
-            }, 100);
+            }, 50);
 
             if (comboDisplayTimeout) clearTimeout(comboDisplayTimeout);
             comboDisplayTimeout = setTimeout(() => {
@@ -5488,6 +5750,7 @@
                         currentPiece.y++;
                         score += 1;
                     }
+                    isHardDrop = true;
                     mergePiece();
                     isSettling = true;
                     break;
@@ -5572,15 +5835,16 @@
                 case 'title':
                     if (isGearButtonTapped(x, y)) {
                         settingsReturnTo = 'title';
-                        gameState = 'settings';
-                        drawSettingsScreen();
+                        startScreenTransition(() => { gameState = 'settings'; drawSettingsScreen(); });
                     } else if (isHighScoreButtonTapped(x, y)) {
                         playHighScoreBGM();
-                        gameState = 'highscore';
-                        hsScrollY = 0;
-                        hsScrollVelocity = 0;
-                        resizeCanvas();
-                        drawHighScoreScreen(true);
+                        startScreenTransition(() => {
+                            gameState = 'highscore';
+                            hsScrollY = 0;
+                            hsScrollVelocity = 0;
+                            resizeCanvas();
+                            drawHighScoreScreen(true);
+                        });
                         await fetchHighScores();
                         if (gameState === 'highscore') drawHighScoreScreen(false);
                     } else {
@@ -5621,9 +5885,7 @@
                         if (btn.id === 'sessionBack' && x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                             gameMode = 'classic';
                             stopMindfulAmbient();
-                            gameState = 'title';
-                            playTitleBGM();
-                            drawTitleScreen();
+                            startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
                             break;
                         }
                     }
@@ -5633,14 +5895,12 @@
                     if (x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) {
                         if (hsAnimFrame) { cancelAnimationFrame(hsAnimFrame); hsAnimFrame = null; }
                         playTitleBGM();
-                        gameState = 'title';
-                        resizeCanvas();
-                        drawTitleScreen();
+                        startScreenTransition(() => { gameState = 'title'; resizeCanvas(); drawTitleScreen(); });
                     }
                     break;
                 }
                 case 'gameOver': {
-                    if (!gameOverReady) return;
+                    if (!gameOverReady || pressedButtonId) return;
                     // ボタン位置を再計算してヒット判定
                     const goW = canvas.width, goCx = goW / 2;
                     const goWinMargin = Math.max(16, goW * 0.06);
@@ -5650,15 +5910,22 @@
                     const goBtns = getGameOverButtons(goStatY + 4 * 32 + 20, goW, goCx);
                     if (x >= goBtns.retry.x && x <= goBtns.retry.x + goBtns.retry.w &&
                         y >= goBtns.retry.y && y <= goBtns.retry.y + goBtns.retry.h) {
-                        // リトライ: 同じモードで即座にゲーム再開
-                        stopAllBGM();
-                        resetGame();
+                        // リトライ: 押下フィードバック→遷移
+                        pressedButtonId = 'go_retry';
+                        drawGameOverScreen();
+                        pressedButtonTimer = setTimeout(() => {
+                            pressedButtonId = null;
+                            startScreenTransition(() => { stopAllBGM(); resetGame(); });
+                        }, 80);
                     } else if (x >= goBtns.title.x && x <= goBtns.title.x + goBtns.title.w &&
                                y >= goBtns.title.y && y <= goBtns.title.y + goBtns.title.h) {
-                        // タイトルへ戻る
-                        gameState = 'title';
-                        playTitleBGM();
-                        drawTitleScreen();
+                        // タイトルへ戻る: 押下フィードバック→遷移
+                        pressedButtonId = 'go_title';
+                        drawGameOverScreen();
+                        pressedButtonTimer = setTimeout(() => {
+                            pressedButtonId = null;
+                            startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
+                        }, 80);
                     }
                     break;
                 }
@@ -5888,6 +6155,7 @@
                 stopAllBGM();
                 playGameOverBGM();
                 gameOverReady = false;
+                gameOverAnimStart = Date.now();
                 drawGameOverScreen();
                 gameOverTimers.push(setTimeout(() => {
                     gameOverReady = true;
