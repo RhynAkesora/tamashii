@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tamashii-no-kyoumei-v3744';
+const CACHE_NAME = 'tamashii-no-kyoumei-v3745';
 const urlsToCache = [
   './',
   './index.html',

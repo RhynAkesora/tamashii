@@ -423,6 +423,11 @@
                 rule6: '5コンボ以上で全消去ボーナス！',
                 rule7: '3コンボでフィーバー突入！',
                 rule8: 'レベルUPで色が増えて難しくなる！',
+                // マインドフル用ルール
+                mindfulRule1: 'スコアやフィーバーはありません',
+                mindfulRule2: 'ゲームオーバーなし（積み上がるとリセット）',
+                mindfulRule3: '選んだ時間が来たらセッション終了',
+                mindfulRule4: '操作の練習にもおすすめです',
                 welcomeMsg: 'はじめに設定と遊び方をご案内します',
                 welcomeTap: 'タップして進む',
                 privacyPolicy: 'プライバシーポリシー',
@@ -456,7 +461,7 @@
                 mindfulOnboard1Text: 'パズルゲームには\nひとつのことに意識を向け\n没頭できる\n不思議な魅力があります。',
                 mindfulOnboard1Sub: '— ただ砂を眺め、ブロックを置く\nその繰り返しの中に\n静けさがあります —',
                 mindfulOnboard2Title: 'マインドフルモードとは',
-                mindfulOnboard2Text: '一つのことに意識を向けること。\nそれが「マインドフル」です。\n\nゲームオーバーはありません。\nブロックが積み上がっても\n砂のように流れてリセットされます。\n\n焦らず、自分のペースで\n遊ぶことができます。',
+                mindfulOnboard2Text: '一つのことに意識を向けること。\nそれが「マインドフル」です。\n\nゲームオーバーはありません。\nブロックが積み上がっても\n砂のように流れてリセットされます。\n\n焦らず、自分のペースで\n遊ぶことができます。\n\n操作の練習モードとしても\nおすすめです。',
                 mindfulOnboard3Title: '遊び方',
                 mindfulOnboard3Text: '操作はノーマルモードと同じです。\n\nスコアはありません。\n選んだ時間が来たら\nセッション終了です。\n\nただ、砂と向き合う時間を\n楽しんでください。',
                 mindfulOnboard4Title: 'はじめましょう',
@@ -492,6 +497,11 @@
                 rule6: '5+ combos triggers All Clear bonus!',
                 rule7: '3 combos activates Fever mode!',
                 rule8: 'Level up adds more colors & difficulty!',
+                // Mindful mode rules
+                mindfulRule1: 'No score or Fever mode',
+                mindfulRule2: 'No game over (resets when full)',
+                mindfulRule3: 'Session ends when time is up',
+                mindfulRule4: 'Great for practicing controls!',
                 welcomeMsg: 'First, let us set up and show you how to play',
                 welcomeTap: 'Tap to continue',
                 privacyPolicy: 'Privacy Policy',
@@ -525,7 +535,7 @@
                 mindfulOnboard1Text: 'Puzzle games have a\nwonderful way of drawing\nyour attention to one thing.',
                 mindfulOnboard1Sub: '— Just watching the sand,\nplacing blocks —\nthere is stillness\nin the repetition —',
                 mindfulOnboard2Title: 'What is Mindful Mode?',
-                mindfulOnboard2Text: "Focusing on one thing\nin the present moment —\nthat is being \"mindful.\"\n\nThere's no game over.\nWhen blocks pile up,\nthey flow away like sand\nand reset.\n\nPlay at your own pace,\nwithout any pressure.",
+                mindfulOnboard2Text: "Focusing on one thing\nin the present moment —\nthat is being \"mindful.\"\n\nThere's no game over.\nWhen blocks pile up,\nthey flow away like sand\nand reset.\n\nPlay at your own pace,\nwithout any pressure.\n\nAlso great for practicing\nyour skills!",
                 mindfulOnboard3Title: 'How to Play',
                 mindfulOnboard3Text: 'Controls are the same\nas Normal mode.\n\nThere is no score.\nWhen your chosen time is up,\nthe session ends.\n\nJust enjoy your time\nwith the flowing sand.',
                 mindfulOnboard4Title: "Let's begin",
@@ -3010,7 +3020,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.744', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.745', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4516,7 +4526,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.744', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.745', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4638,8 +4648,12 @@
             ctx.moveTo(cx - 60, winY + 53); ctx.lineTo(cx + 60, winY + 53);
             ctx.stroke();
 
-            // ルール一覧
-            const rules = [
+            // ルール一覧（マインドフルモードではスコア・フィーバー系を除外）
+            const rules = gameMode === 'mindful' ? [
+                t('rule1'), t('rule2'), t('rule3'), t('rule3b'), t('rule3b2'), t('rule3c'),
+                t('rule4'), t('rule8'),
+                t('mindfulRule1'), t('mindfulRule2'), t('mindfulRule3'), t('mindfulRule4')
+            ] : [
                 t('rule1'), t('rule2'), t('rule3'), t('rule3b'), t('rule3b2'), t('rule3c'),
                 t('rule4'), t('rule8'), t('rule5'), t('rule7'), t('rule6')
             ];
