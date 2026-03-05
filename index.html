@@ -2904,8 +2904,8 @@
             drawYogaMonk();
 
             // コンセプトテキスト（SFC風ウィンドウ付き）
-            const conceptFontSize = isSmallScreen ? 13 : 15;
-            const conceptY = isSmallScreen ? H * 0.68 : H * 0.70;
+            const conceptFontSize = isSmallScreen ? 11 : 13;
+            const conceptY = isSmallScreen ? H * 0.64 : H * 0.66;
             const conceptText = t('concept');
             ctx.font = `bold ${conceptFontSize}px Arial`;
             const conceptTw = ctx.measureText(conceptText).width;
@@ -2981,7 +2981,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.734', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.736', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3739,16 +3739,16 @@
          */
         function getHighScoreButtonRect() {
             const isSmallScreen = canvas.height < SMALL_SCREEN_THRESHOLD;
-            const buttonWidth = Math.min(canvas.width * 0.35, 280);
-            const buttonHeight = Math.min(isSmallScreen ? 38 : 44, canvas.height * 0.06);
+            const buttonWidth = Math.min(canvas.width * 0.32, 240);
+            const buttonHeight = Math.min(isSmallScreen ? 34 : 38, canvas.height * 0.05);
             const buttonX = canvas.width / 2 - buttonWidth / 2;
-            const buttonY = canvas.height * (isSmallScreen ? 0.76 : 0.78);
-            return { x: buttonX, y: buttonY, w: buttonWidth, h: Math.max(buttonHeight, 38) };
+            const buttonY = canvas.height * (isSmallScreen ? 0.72 : 0.73);
+            return { x: buttonX, y: buttonY, w: buttonWidth, h: Math.max(buttonHeight, 34) };
         }
         function drawHighScoreButton() {
             const r = getHighScoreButtonRect();
             const isSmallScreen = canvas.height < SMALL_SCREEN_THRESHOLD;
-            drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'blue', isSmallScreen ? 16 : 18);
+            drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'blue', isSmallScreen ? 14 : 16);
         }
 
         /**
@@ -4109,35 +4109,39 @@
             // ウィンドウ領域
             const winY = H * 0.1, winH = H * 0.8;
             const winBottom = winY + winH;
-            // ボタン配置可能領域: タイトル(60px)の下〜クレジット(70px)の上
+            // ボタン配置可能領域: タイトル(60px)の下〜フッター(90px: リンク+クレジット)の上
             const contentTop = winY + 70;
-            const contentBottom = winBottom - 70;
+            const contentBottom = winBottom - 90;
             const contentH = contentBottom - contentTop;
-            // 初回設定では遊び方ボタンを非表示（3段）、通常は8段
+            // 初回設定では遊び方ボタンを非表示（3段）、通常は6段
             const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
-            const slots = isFirstSetup ? 3 : 8;
+            const slots = isFirstSetup ? 3 : 6;
             const gap = contentH / slots;
             const soundY = contentTop + gap * 0.5 - btnHeight / 2;
             const langY = contentTop + gap * 1.5 - btnHeight / 2;
             const howToPlayY = isFirstSetup ? -999 : contentTop + gap * 2.5 - btnHeight / 2;
             const mindfulInfoY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
-            const privacyY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
-            const termsY = isFirstSetup ? -999 : contentTop + gap * 5.5 - btnHeight / 2;
-            const contactY = isFirstSetup ? -999 : contentTop + gap * 6.5 - btnHeight / 2;
+            const contactY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
             const backY = contentTop + gap * (slots - 0.5) - btnHeight / 2;
             // 言語: 2つの横並びボタン
             const langGap = 10;
             const langBtnW = (btnWidth - langGap) / 2;
+            // プライバシーポリシー・利用規約: フッターのテキストリンク
+            const linkFontSize = Math.max(11, Math.min(13, W * 0.032));
+            const linkY = winBottom - 62;
+            const winMargin2 = Math.max(20, W * 0.08);
+            const linkHitH = linkFontSize + 10;
             return {
                 sound:    { x: btnX, y: soundY, w: btnWidth, h: btnHeight },
                 langJa:   { x: btnX, y: langY, w: langBtnW, h: btnHeight },
                 langEn:   { x: btnX + langBtnW + langGap, y: langY, w: langBtnW, h: btnHeight },
                 howToPlay:{ x: btnX, y: howToPlayY, w: btnWidth, h: btnHeight },
                 mindfulInfo: { x: btnX, y: mindfulInfoY, w: btnWidth, h: btnHeight },
-                privacy:  { x: btnX, y: privacyY, w: btnWidth, h: btnHeight },
-                terms:    { x: btnX, y: termsY, w: btnWidth, h: btnHeight },
                 contact:  { x: btnX, y: contactY, w: btnWidth, h: btnHeight },
-                back:     { x: btnX, y: backY, w: btnWidth, h: btnHeight }
+                back:     { x: btnX, y: backY, w: btnWidth, h: btnHeight },
+                // テキストリンク（左半分=プライバシーポリシー、右半分=利用規約）
+                privacyLink: { x: winMargin2, y: linkY - linkHitH / 2, w: (W - winMargin2 * 2) / 2, h: linkHitH, fontSize: linkFontSize },
+                termsLink:   { x: W / 2, y: linkY - linkHitH / 2, w: (W - winMargin2 * 2) / 2, h: linkHitH, fontSize: linkFontSize }
             };
         }
 
@@ -4409,18 +4413,6 @@
                     t('mindfulInfo'), 'green');
             }
 
-            // プライバシーポリシーボタン（初回設定では非表示）
-            if (btns.privacy.y >= 0) {
-                drawSFCButton(btns.privacy.x, btns.privacy.y, btns.privacy.w, btns.privacy.h,
-                    t('privacyPolicy'), 'blue');
-            }
-
-            // 利用規約ボタン（初回設定では非表示）
-            if (btns.terms.y >= 0) {
-                drawSFCButton(btns.terms.x, btns.terms.y, btns.terms.w, btns.terms.h,
-                    t('termsOfService'), 'blue');
-            }
-
             // お問い合わせボタン（初回設定では非表示）
             if (btns.contact.y >= 0) {
                 drawSFCButton(btns.contact.x, btns.contact.y, btns.contact.w, btns.contact.h,
@@ -4434,12 +4426,51 @@
                 drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('back'), 'red');
             }
 
+            // プライバシーポリシー・利用規約テキストリンク
+            if (btns.privacyLink.y >= 0) {
+                const lfs = btns.privacyLink.fontSize;
+                ctx.font = `${lfs}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const linkCy = btns.privacyLink.y + btns.privacyLink.h / 2;
+                // プライバシーポリシー
+                const privText = t('privacyPolicy');
+                const privCx = cx - 8;
+                ctx.fillStyle = 'rgba(140, 160, 220, 0.8)';
+                ctx.textAlign = 'right';
+                ctx.fillText(privText, privCx, linkCy);
+                const privTw = ctx.measureText(privText).width;
+                ctx.strokeStyle = 'rgba(140, 160, 220, 0.4)';
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(privCx - privTw, linkCy + lfs * 0.45);
+                ctx.lineTo(privCx, linkCy + lfs * 0.45);
+                ctx.stroke();
+                // 区切り
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(150, 150, 170, 0.4)';
+                ctx.fillText('|', cx, linkCy);
+                // 利用規約
+                const termsText = t('termsOfService');
+                const termsCx = cx + 8;
+                ctx.fillStyle = 'rgba(140, 160, 220, 0.8)';
+                ctx.textAlign = 'left';
+                ctx.fillText(termsText, termsCx, linkCy);
+                const termsTw = ctx.measureText(termsText).width;
+                ctx.strokeStyle = 'rgba(140, 160, 220, 0.4)';
+                ctx.beginPath();
+                ctx.moveTo(termsCx, linkCy + lfs * 0.45);
+                ctx.lineTo(termsCx + termsTw, linkCy + lfs * 0.45);
+                ctx.stroke();
+                ctx.textAlign = 'center';
+            }
+
             // クレジット + バージョン（ウィンドウ内最下部）
             const winBottom = winY + winH;
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.734', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.736', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4449,67 +4480,49 @@
          */
         function handleSettingsTap(x, y) {
             const btns = getSettingsButtons();
-            const hitSound = x >= btns.sound.x && x <= btns.sound.x + btns.sound.w &&
-                             y >= btns.sound.y && y <= btns.sound.y + btns.sound.h;
-            const hitLangJa = x >= btns.langJa.x && x <= btns.langJa.x + btns.langJa.w &&
-                              y >= btns.langJa.y && y <= btns.langJa.y + btns.langJa.h;
-            const hitLangEn = x >= btns.langEn.x && x <= btns.langEn.x + btns.langEn.w &&
-                              y >= btns.langEn.y && y <= btns.langEn.y + btns.langEn.h;
-            const hitHowToPlay = x >= btns.howToPlay.x && x <= btns.howToPlay.x + btns.howToPlay.w &&
-                                y >= btns.howToPlay.y && y <= btns.howToPlay.y + btns.howToPlay.h;
-            const hitPrivacy = x >= btns.privacy.x && x <= btns.privacy.x + btns.privacy.w &&
-                               y >= btns.privacy.y && y <= btns.privacy.y + btns.privacy.h;
-            const hitTerms = x >= btns.terms.x && x <= btns.terms.x + btns.terms.w &&
-                             y >= btns.terms.y && y <= btns.terms.y + btns.terms.h;
-            const hitContact = x >= btns.contact.x && x <= btns.contact.x + btns.contact.w &&
-                               y >= btns.contact.y && y <= btns.contact.y + btns.contact.h;
-            const hitBack = x >= btns.back.x && x <= btns.back.x + btns.back.w &&
-                            y >= btns.back.y && y <= btns.back.y + btns.back.h;
+            const hit = (b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
 
-            if (hitSound) {
+            if (hit(btns.sound)) {
                 toggleSound();
                 drawSettingsScreen();
-            } else if (hitLangJa && currentLang !== 'ja') {
+            } else if (hit(btns.langJa) && currentLang !== 'ja') {
                 currentLang = 'ja';
                 saveSettings();
                 updateHTMLText();
                 prevScoreText = '';
                 updateScoreDisplay();
                 drawSettingsScreen();
-            } else if (hitLangEn && currentLang !== 'en') {
+            } else if (hit(btns.langEn) && currentLang !== 'en') {
                 currentLang = 'en';
                 saveSettings();
                 updateHTMLText();
                 prevScoreText = '';
                 updateScoreDisplay();
                 drawSettingsScreen();
-            } else if (hitHowToPlay) {
+            } else if (hit(btns.howToPlay) && btns.howToPlay.y >= 0) {
                 howToPlayReturnTo = 'settings';
                 howToPlayShownAt = Date.now();
                 gameState = 'howToPlay';
                 drawHowToPlayScreen();
-            } else if (btns.mindfulInfo.y >= 0 &&
-                       x >= btns.mindfulInfo.x && x <= btns.mindfulInfo.x + btns.mindfulInfo.w &&
-                       y >= btns.mindfulInfo.y && y <= btns.mindfulInfo.y + btns.mindfulInfo.h) {
+            } else if (btns.mindfulInfo.y >= 0 && hit(btns.mindfulInfo)) {
                 // マインドフルモードの説明を表示（オンボーディング画面を再利用）
                 mindfulOnboardPage = 0;
                 gameState = 'mindfulOnboard';
-                // 設定画面から来たことを記録（戻り先用）
                 mindfulOnboardReturnTo = 'settings';
                 drawMindfulOnboardScreen();
-            } else if (hitPrivacy) {
+            } else if (btns.privacyLink.y >= 0 && hit(btns.privacyLink)) {
                 const privacyUrl = currentLang === 'en'
                     ? 'https://nullpoworks.github.io/privacy-policy-en.html'
                     : 'https://nullpoworks.github.io/privacy-policy.html';
                 window.open(privacyUrl, '_blank');
-            } else if (hitTerms) {
+            } else if (btns.termsLink.y >= 0 && hit(btns.termsLink)) {
                 const termsUrl = currentLang === 'en'
                     ? 'https://nullpoworks.github.io/terms-tamashii-en.html'
                     : 'https://nullpoworks.github.io/terms-tamashii.html';
                 window.open(termsUrl, '_blank');
-            } else if (hitContact) {
+            } else if (hit(btns.contact) && btns.contact.y >= 0) {
                 window.open('https://nullpoworks.github.io/contact.html', '_blank');
-            } else if (hitBack) {
+            } else if (hit(btns.back)) {
                 if (settingsReturnTo === 'playing' && !shownTutorial) {
                     // 初回: 設定→遊び方画面→ゲーム開始
                     shownTutorial = true;
