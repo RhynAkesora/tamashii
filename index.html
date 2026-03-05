@@ -433,9 +433,9 @@
                 retry: 'もう一度',
                 // モード選択
                 modeSelectTitle: 'モード選択',
-                modeClassic: 'クラシック',
+                modeNormal: 'ノーマル',
                 modeMindful: 'マインドフル',
-                modeClassicDesc: 'スコアを競う通常モード',
+                modeNormalDesc: 'スコアを競う通常モード',
                 modeMindfulDesc: '心を整える瞑想モード',
                 // タイマー選択
                 timerSelectTitle: 'セッション時間',
@@ -451,6 +451,19 @@
                 sessionTime: 'プレイ時間',
                 sessionMessage: 'お疲れさまでした。\n心が少し軽くなっていますように。',
                 sessionBack: 'タイトルに戻る',
+                // マインドフル初回オンボーディング
+                mindfulOnboard1Title: '知っていますか？',
+                mindfulOnboard1Text: 'パズルゲームを遊ぶと\n不安やストレスが和らぐことが\n研究で明らかになっています。',
+                mindfulOnboard1Sub: '※ Oxford大学 Emily Holmes博士らの研究より',
+                mindfulOnboard2Title: 'マインドフルモードとは',
+                mindfulOnboard2Text: 'ゲームオーバーがありません。\nブロックが積み上がっても\n砂のように流れてリセットされます。\n\n焦らず、自分のペースで\n遊ぶことができます。',
+                mindfulOnboard3Title: '遊び方',
+                mindfulOnboard3Text: '操作はノーマルモードと同じです。\n\nスコアはありません。\n選んだ時間が来たら\nセッション終了です。\n\nただ、砂と向き合う時間を\n楽しんでください。',
+                mindfulOnboard4Title: 'はじめましょう',
+                mindfulOnboard4Text: '深呼吸をひとつして\nリラックスしてから\nはじめてみてください。\n\n心が少し軽くなるかもしれません。',
+                mindfulOnboardNext: '次へ',
+                mindfulOnboardStart: 'はじめる',
+                mindfulInfo: 'マインドフルモードとは',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -489,9 +502,9 @@
                 retry: 'Retry',
                 // Mode selection
                 modeSelectTitle: 'Select Mode',
-                modeClassic: 'Classic',
+                modeNormal: 'Normal',
                 modeMindful: 'Mindful',
-                modeClassicDesc: 'Standard score attack',
+                modeNormalDesc: 'Standard score attack',
                 modeMindfulDesc: 'Meditative relaxation',
                 // Timer selection
                 timerSelectTitle: 'Session Duration',
@@ -507,6 +520,19 @@
                 sessionTime: 'Play Time',
                 sessionMessage: 'Well done.\nMay your mind feel a little lighter.',
                 sessionBack: 'Back to Title',
+                // Mindful onboarding
+                mindfulOnboard1Title: 'Did you know?',
+                mindfulOnboard1Text: 'Research has shown that\nplaying puzzle games can help\nreduce anxiety and stress.',
+                mindfulOnboard1Sub: '* Based on research by Dr. Emily Holmes, Oxford University',
+                mindfulOnboard2Title: 'What is Mindful Mode?',
+                mindfulOnboard2Text: "There's no game over.\nWhen blocks pile up,\nthey flow away like sand\nand reset automatically.\n\nPlay at your own pace,\nwithout any pressure.",
+                mindfulOnboard3Title: 'How to Play',
+                mindfulOnboard3Text: 'Controls are the same\nas Normal mode.\n\nThere is no score.\nWhen your chosen time is up,\nthe session ends.\n\nJust enjoy your time\nwith the flowing sand.',
+                mindfulOnboard4Title: "Let's begin",
+                mindfulOnboard4Text: 'Take a deep breath\nand relax before\nyou start.\n\nYour mind may feel\na little lighter afterward.',
+                mindfulOnboardNext: 'Next',
+                mindfulOnboardStart: 'Start',
+                mindfulInfo: 'About Mindful Mode',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -520,6 +546,8 @@
                 if (muted === '1') soundMuted = true;
                 const tutorial = localStorage.getItem('tamashii_shown_tutorial');
                 if (tutorial === '1') shownTutorial = true;
+                const mindfulTut = localStorage.getItem('tamashii_shown_mindful_tutorial');
+                if (mindfulTut === '1') shownMindfulTutorial = true;
             } catch(e) {}
         }
         function saveSettings() {
@@ -566,6 +594,11 @@
         let isMindfulResetting = false;     // リセットアニメ中
         let mindfulResetFrame = 0;          // リセットアニメフレーム
         const MINDFUL_RESET_DURATION = 90;  // 1.5秒 @60fps
+        let shownMindfulTutorial = false;   // マインドフル初回チュートリアル済みフラグ
+        let mindfulOnboardPage = 0;         // オンボーディングページ (0-3)
+        let mindfulOnboardButtons = [];     // オンボーディングボタン座標
+        let mindfulOnboardReturnTo = '';    // 'settings' or '' (タイトルからの初回)
+        let titleModeButtons = [];          // タイトル画面のモードボタン座標
         let mindfulComboHue = 0;            // コンボ色変化用色相
         let mindfulAmbientGain = null;      // 環境音ゲインノード
         let mindfulAmbientSource = null;    // 環境音ソース
@@ -2910,51 +2943,45 @@
             drawHighScoreButton();
             drawGearButton();
 
-            // ゲーム開始テキスト（SFC風装飾付き）
-            const instructionY = isSmallScreen ? H * 0.92 : H * 0.90;
-            const instFs = isSmallScreen ? 16 : 18;
-            const instText = t('tapToStart');
-            ctx.font = `bold ${instFs}px Arial`;
-            ctx.textAlign = 'center';
-            const instTw = ctx.measureText(instText).width;
-            // 左右の装飾ダイヤ + ライン
-            const diaSize = 4;
-            ctx.fillStyle = 'rgba(192, 160, 64, 0.6)';
-            // 左ダイヤ
-            ctx.save();
-            ctx.translate(cx - instTw / 2 - 16, instructionY);
-            ctx.rotate(Math.PI / 4);
-            ctx.fillRect(-diaSize / 2, -diaSize / 2, diaSize, diaSize);
-            ctx.restore();
-            // 右ダイヤ
-            ctx.save();
-            ctx.translate(cx + instTw / 2 + 16, instructionY);
-            ctx.rotate(Math.PI / 4);
-            ctx.fillRect(-diaSize / 2, -diaSize / 2, diaSize, diaSize);
-            ctx.restore();
-            // 装飾ライン
-            ctx.strokeStyle = 'rgba(192, 160, 64, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(cx - instTw / 2 - 30, instructionY); ctx.lineTo(cx - instTw / 2 - 20, instructionY);
-            ctx.moveTo(cx + instTw / 2 + 20, instructionY); ctx.lineTo(cx + instTw / 2 + 30, instructionY);
-            ctx.stroke();
-            // テキスト本体（縁取り + グロー）
-            ctx.strokeStyle = 'rgba(20, 10, 50, 0.8)';
-            ctx.lineWidth = 3;
-            ctx.strokeText(instText, cx, instructionY);
-            ctx.fillStyle = COLOR_TEXT;
-            ctx.shadowColor = 'rgba(140, 120, 255, 0.5)';
-            ctx.shadowBlur = 6;
-            ctx.fillText(instText, cx, instructionY);
-            ctx.shadowBlur = 0;
+            // モード選択ボタン（タイトル画面直接配置）
+            {
+                const btnAreaY = isSmallScreen ? H * 0.82 : H * 0.80;
+                const btnGap = 10;
+                const totalBtnW = Math.min(W * 0.72, 300);
+                const singleBtnW = (totalBtnW - btnGap) / 2;
+                const btnH = Math.min(42, H * 0.06);
+                const btnStartX = cx - totalBtnW / 2;
+
+                // ノーマルボタン（青）
+                const normalX = btnStartX;
+                drawSFCButton(normalX, btnAreaY, singleBtnW, btnH, t('modeNormal'), 'blue');
+
+                // マインドフルボタン（緑）
+                const mindfulX = btnStartX + singleBtnW + btnGap;
+                drawSFCButton(mindfulX, btnAreaY, singleBtnW, btnH, t('modeMindful'), 'green');
+
+                // 説明テキスト
+                const descFs = isSmallScreen ? 9 : 11;
+                ctx.font = `${descFs}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(200, 200, 220, 0.6)';
+                ctx.fillText(t('modeNormalDesc'), normalX + singleBtnW / 2, btnAreaY + btnH + 14);
+                ctx.fillStyle = 'rgba(180, 220, 200, 0.6)';
+                ctx.fillText(t('modeMindfulDesc'), mindfulX + singleBtnW / 2, btnAreaY + btnH + 14);
+
+                // ボタン座標を保存
+                titleModeButtons = [
+                    { id: 'normal', x: normalX, y: btnAreaY, w: singleBtnW, h: btnH },
+                    { id: 'mindful', x: mindfulX, y: btnAreaY, w: singleBtnW, h: btnH },
+                ];
+            }
 
             // バージョン
             const versionFontSize = isSmallScreen ? 12 : 14;
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.731', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.733', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3147,12 +3174,169 @@
             for (const btn of timerSelectButtons) {
                 if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                     if (btn.id === 'back') {
-                        gameState = 'modeSelect';
-                        drawModeSelectScreen();
+                        gameState = 'title';
+                        drawTitleScreen();
                     } else {
                         mindfulTimerDuration = btn.duration;
                         mindfulTimeRemaining = btn.duration;
                         resetGame();
+                    }
+                    return;
+                }
+            }
+        }
+
+        /**
+         * マインドフルモード初回オンボーディング画面を描画する
+         */
+        function drawMindfulOnboardScreen() {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+            const isSmallScreen = H < SMALL_SCREEN_THRESHOLD;
+            const page = mindfulOnboardPage;
+
+            // 背景（ページごとに微妙に変化する穏やかなグラデーション）
+            const bgColors = [
+                ['#0a1a2e', '#152040', '#0a1830'], // 深い夜空
+                ['#0a1a2a', '#0c2838', '#0a2030'], // 深い海
+                ['#101828', '#0c2030', '#081820'], // 静かな森
+                ['#0e1825', '#122838', '#0a1a28'], // 夜明け前
+            ];
+            const bg = bgColors[page];
+            const gradient = ctx.createLinearGradient(0, 0, 0, H);
+            gradient.addColorStop(0, bg[0]);
+            gradient.addColorStop(0.5, bg[1]);
+            gradient.addColorStop(1, bg[2]);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, W, H);
+
+            // 背景パーティクル（穏やかな光の粒）
+            for (let i = 0; i < 20; i++) {
+                const px = ((i * 173 + 37 + page * 50) % 1000) / 1000 * W;
+                const py = ((i * 239 + 61 + page * 30) % 1000) / 1000 * H;
+                const glow = 0.1 + 0.12 * Math.sin(Date.now() * 0.0006 + i * 1.3 + page);
+                ctx.fillStyle = `rgba(100, 180, 200, ${glow})`;
+                ctx.beginPath();
+                ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // SFCウィンドウ
+            const winW = Math.min(W * 0.88, 370);
+            const winH = Math.min(H * 0.65, 420);
+            const winX = cx - winW / 2;
+            const winY = H * 0.12;
+            drawSFCWindow(winX, winY, winW, winH, 'purple');
+
+            // ページインジケーター（ドット）
+            const dotY = winY + 22;
+            const dotGap = 14;
+            const dotsStartX = cx - (3 * dotGap) / 2;
+            for (let i = 0; i < 4; i++) {
+                const dotX = dotsStartX + i * dotGap;
+                ctx.beginPath();
+                ctx.arc(dotX, dotY, i === page ? 4 : 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = i === page ? '#80d8c0' : 'rgba(255, 255, 255, 0.25)';
+                ctx.fill();
+            }
+
+            // タイトル
+            const titleKey = `mindfulOnboard${page + 1}Title`;
+            const titleFs = isSmallScreen ? 18 : 22;
+            ctx.fillStyle = '#80d8c0';
+            ctx.font = `bold ${titleFs}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(100, 200, 180, 0.3)';
+            ctx.shadowBlur = 6;
+            ctx.fillText(t(titleKey), cx, winY + 55);
+            ctx.shadowBlur = 0;
+
+            // 本文
+            const textKey = `mindfulOnboard${page + 1}Text`;
+            const textFs = isSmallScreen ? 13 : 15;
+            const lineH = textFs + 6;
+            ctx.fillStyle = 'rgba(220, 240, 235, 0.85)';
+            ctx.font = `${textFs}px Arial`;
+            const textLines = t(textKey).split('\n');
+            const textStartY = winY + 85;
+            textLines.forEach((line, i) => {
+                ctx.fillText(line, cx, textStartY + i * lineH);
+            });
+
+            // サブテキスト（ページ1のみ: 研究出典）
+            if (page === 0) {
+                const subKey = `mindfulOnboard1Sub`;
+                const subFs = isSmallScreen ? 10 : 11;
+                ctx.fillStyle = 'rgba(180, 200, 195, 0.5)';
+                ctx.font = `${subFs}px Arial`;
+                ctx.fillText(t(subKey), cx, textStartY + textLines.length * lineH + 16);
+            }
+
+            // ボタン
+            const btnW = winW * 0.45;
+            const btnH = Math.min(42, H * 0.06);
+            const btnY = winY + winH - 55;
+            mindfulOnboardButtons = [];
+
+            if (page < 3) {
+                // 「次へ」ボタン
+                const nextX = cx - btnW / 2;
+                drawSFCButton(nextX, btnY, btnW, btnH, t('mindfulOnboardNext'), 'green');
+                mindfulOnboardButtons.push({ id: 'next', x: nextX, y: btnY, w: btnW, h: btnH });
+            } else {
+                // 最終ページ: 設定から来た場合は「戻る」、初回は「はじめる」
+                const startX = cx - btnW / 2;
+                const lastLabel = mindfulOnboardReturnTo === 'settings' ? t('back') : t('mindfulOnboardStart');
+                const lastColor = mindfulOnboardReturnTo === 'settings' ? 'blue' : 'green';
+                drawSFCButton(startX, btnY, btnW, btnH, lastLabel, lastColor);
+                mindfulOnboardButtons.push({ id: 'start', x: startX, y: btnY, w: btnW, h: btnH });
+            }
+
+            // 戻るボタン（小さめ、左下）
+            const backBtnW = btnW * 0.6;
+            const backBtnH = btnH * 0.75;
+            const backX = winX + 15;
+            const backY = btnY + (btnH - backBtnH) / 2;
+            drawSFCButton(backX, backY, backBtnW, backBtnH, t('back'), 'gray', isSmallScreen ? 11 : 13);
+            mindfulOnboardButtons.push({ id: 'back', x: backX, y: backY, w: backBtnW, h: backBtnH });
+        }
+
+        /**
+         * マインドフル初回オンボーディングのタップ処理
+         */
+        function handleMindfulOnboardTap(x, y) {
+            for (const btn of mindfulOnboardButtons) {
+                if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                    if (btn.id === 'next') {
+                        mindfulOnboardPage++;
+                        drawMindfulOnboardScreen();
+                    } else if (btn.id === 'start') {
+                        if (mindfulOnboardReturnTo === 'settings') {
+                            // 設定画面から来た場合 → 設定に戻る
+                            mindfulOnboardReturnTo = '';
+                            gameState = 'settings';
+                            drawSettingsScreen();
+                        } else {
+                            // 初回オンボーディング → 永続化 → タイマー選択へ
+                            shownMindfulTutorial = true;
+                            try { localStorage.setItem('tamashii_shown_mindful_tutorial', '1'); } catch(e) {}
+                            gameState = 'timerSelect';
+                            drawTimerSelectScreen();
+                        }
+                    } else if (btn.id === 'back') {
+                        if (mindfulOnboardPage > 0) {
+                            mindfulOnboardPage--;
+                            drawMindfulOnboardScreen();
+                        } else if (mindfulOnboardReturnTo === 'settings') {
+                            // 設定画面から来た場合 → 設定に戻る
+                            mindfulOnboardReturnTo = '';
+                            gameState = 'settings';
+                            drawSettingsScreen();
+                        } else {
+                            // タイトルからの初回 → タイトルへ
+                            gameMode = 'classic';
+                            gameState = 'title';
+                            drawTitleScreen();
+                        }
                     }
                     return;
                 }
@@ -3929,16 +4113,17 @@
             const contentTop = winY + 70;
             const contentBottom = winBottom - 70;
             const contentH = contentBottom - contentTop;
-            // 初回設定では遊び方ボタンを非表示（3段）、通常は7段
+            // 初回設定では遊び方ボタンを非表示（3段）、通常は8段
             const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
-            const slots = isFirstSetup ? 3 : 7;
+            const slots = isFirstSetup ? 3 : 8;
             const gap = contentH / slots;
             const soundY = contentTop + gap * 0.5 - btnHeight / 2;
             const langY = contentTop + gap * 1.5 - btnHeight / 2;
             const howToPlayY = isFirstSetup ? -999 : contentTop + gap * 2.5 - btnHeight / 2;
-            const privacyY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
-            const termsY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
-            const contactY = isFirstSetup ? -999 : contentTop + gap * 5.5 - btnHeight / 2;
+            const mindfulInfoY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
+            const privacyY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
+            const termsY = isFirstSetup ? -999 : contentTop + gap * 5.5 - btnHeight / 2;
+            const contactY = isFirstSetup ? -999 : contentTop + gap * 6.5 - btnHeight / 2;
             const backY = contentTop + gap * (slots - 0.5) - btnHeight / 2;
             // 言語: 2つの横並びボタン
             const langGap = 10;
@@ -3948,6 +4133,7 @@
                 langJa:   { x: btnX, y: langY, w: langBtnW, h: btnHeight },
                 langEn:   { x: btnX + langBtnW + langGap, y: langY, w: langBtnW, h: btnHeight },
                 howToPlay:{ x: btnX, y: howToPlayY, w: btnWidth, h: btnHeight },
+                mindfulInfo: { x: btnX, y: mindfulInfoY, w: btnWidth, h: btnHeight },
                 privacy:  { x: btnX, y: privacyY, w: btnWidth, h: btnHeight },
                 terms:    { x: btnX, y: termsY, w: btnWidth, h: btnHeight },
                 contact:  { x: btnX, y: contactY, w: btnWidth, h: btnHeight },
@@ -4217,6 +4403,12 @@
                     t('howToPlay'), 'blue');
             }
 
+            // マインドフルモードとはボタン（初回設定では非表示）
+            if (btns.mindfulInfo.y >= 0) {
+                drawSFCButton(btns.mindfulInfo.x, btns.mindfulInfo.y, btns.mindfulInfo.w, btns.mindfulInfo.h,
+                    t('mindfulInfo'), 'green');
+            }
+
             // プライバシーポリシーボタン（初回設定では非表示）
             if (btns.privacy.y >= 0) {
                 drawSFCButton(btns.privacy.x, btns.privacy.y, btns.privacy.w, btns.privacy.h,
@@ -4247,7 +4439,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.731', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.733', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4296,6 +4488,15 @@
                 howToPlayShownAt = Date.now();
                 gameState = 'howToPlay';
                 drawHowToPlayScreen();
+            } else if (btns.mindfulInfo.y >= 0 &&
+                       x >= btns.mindfulInfo.x && x <= btns.mindfulInfo.x + btns.mindfulInfo.w &&
+                       y >= btns.mindfulInfo.y && y <= btns.mindfulInfo.y + btns.mindfulInfo.h) {
+                // マインドフルモードの説明を表示（オンボーディング画面を再利用）
+                mindfulOnboardPage = 0;
+                gameState = 'mindfulOnboard';
+                // 設定画面から来たことを記録（戻り先用）
+                mindfulOnboardReturnTo = 'settings';
+                drawMindfulOnboardScreen();
             } else if (hitPrivacy) {
                 const privacyUrl = currentLang === 'en'
                     ? 'https://nullpoworks.github.io/privacy-policy-en.html'
@@ -5295,15 +5496,36 @@
                         await fetchHighScores();
                         if (gameState === 'highscore') drawHighScoreScreen(false);
                     } else {
-                        gameState = 'modeSelect';
-                        drawModeSelectScreen();
+                        // モードボタンのヒット判定
+                        for (const btn of titleModeButtons) {
+                            if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                                if (btn.id === 'normal') {
+                                    gameMode = 'classic';
+                                    resetGame();
+                                } else if (btn.id === 'mindful') {
+                                    gameMode = 'mindful';
+                                    if (!shownMindfulTutorial) {
+                                        // 初回: オンボーディング表示
+                                        mindfulOnboardPage = 0;
+                                        mindfulOnboardReturnTo = '';
+                                        gameState = 'mindfulOnboard';
+                                        drawMindfulOnboardScreen();
+                                    } else {
+                                        // 2回目以降: タイマー選択へ
+                                        gameState = 'timerSelect';
+                                        drawTimerSelectScreen();
+                                    }
+                                }
+                                break;
+                            }
+                        }
                     }
-                    break;
-                case 'modeSelect':
-                    handleModeSelectTap(x, y);
                     break;
                 case 'timerSelect':
                     handleTimerSelectTap(x, y);
+                    break;
+                case 'mindfulOnboard':
+                    handleMindfulOnboardTap(x, y);
                     break;
                 case 'sessionComplete':
                     // セッション完了画面のタップ処理
@@ -5811,6 +6033,9 @@
                              drawGrid(); if(currentPiece) drawPiece(); if(nextPiece) drawNextPiece(); drawGameAreaFrame(); drawPauseScreen(); break;
                         case 'settings': drawSettingsScreen(); break;
                         case 'howToPlay': drawHowToPlayScreen(); break;
+                        case 'timerSelect': drawTimerSelectScreen(); break;
+                        case 'mindfulOnboard': drawMindfulOnboardScreen(); break;
+                        case 'sessionComplete': drawSessionCompleteScreen(); break;
                     }
                 }, 50);
             });
