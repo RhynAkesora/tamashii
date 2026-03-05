@@ -2981,7 +2981,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.737', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.738', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4116,16 +4116,23 @@
             const contentTop = winY + 70;
             const contentBottom = winBottom - 90;
             const contentH = contentBottom - contentTop;
-            // 初回設定では遊び方ボタンを非表示（3段）、通常は6段
             const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
-            const slots = isFirstSetup ? 3 : 6;
-            const gap = contentH / slots;
-            const soundY = contentTop + gap * 0.5 - btnHeight / 2;
-            const langY = contentTop + gap * 1.5 - btnHeight / 2;
-            const howToPlayY = isFirstSetup ? -999 : contentTop + gap * 2.5 - btnHeight / 2;
-            const mindfulInfoY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
-            const contactY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
-            const backY = contentTop + gap * (slots - 0.5) - btnHeight / 2;
+            // ラベル付きスロット(サウンド・言語)はラベル高さ分を加算
+            const labelGap = 18;
+            const labelSlotH = btnHeight + labelGap;
+            const plainSlotH = btnHeight;
+            const plainCount = isFirstSetup ? 1 : 4;
+            const totalItemH = labelSlotH * 2 + plainSlotH * plainCount;
+            const spacing = Math.max(4, (contentH - totalItemH) / (plainCount + 2));
+            // soundY, langY = ボタンのY座標（ラベルはその上に描画）
+            const soundY = contentTop + spacing + labelGap;
+            const langY = soundY + btnHeight + spacing + labelGap;
+            const plainStart = langY + btnHeight + spacing;
+            const howToPlayY = isFirstSetup ? -999 : plainStart;
+            const mindfulInfoY = isFirstSetup ? -999 : plainStart + (plainSlotH + spacing);
+            const contactY = isFirstSetup ? -999 : plainStart + (plainSlotH + spacing) * 2;
+            const backIdx = isFirstSetup ? 0 : 3;
+            const backY = plainStart + (plainSlotH + spacing) * backIdx;
             // 言語: 2つの横並びボタン
             const langGap = 10;
             const langBtnW = (btnWidth - langGap) / 2;
@@ -4387,7 +4394,7 @@
             // サウンドラベル
             ctx.fillStyle = 'rgba(200, 180, 150, 0.7)';
             ctx.font = 'bold 14px Arial';
-            ctx.fillText(t('sound'), cx, btns.sound.y - 12);
+            ctx.fillText(t('sound'), cx, btns.sound.y - 6);
 
             // サウンドトグルボタン
             drawSFCButton(btns.sound.x, btns.sound.y, btns.sound.w, btns.sound.h,
@@ -4396,7 +4403,7 @@
             // 言語ラベル
             ctx.fillStyle = 'rgba(200, 180, 150, 0.7)';
             ctx.font = 'bold 14px Arial';
-            ctx.fillText('Language / 言語', cx, btns.langJa.y - 12);
+            ctx.fillText('Language / 言語', cx, btns.langJa.y - 6);
 
             // 言語選択ボタン（2つ横並び: 選択中=green, 非選択=gray）
             drawSFCButton(btns.langJa.x, btns.langJa.y, btns.langJa.w, btns.langJa.h,
@@ -4473,7 +4480,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.737', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.738', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
