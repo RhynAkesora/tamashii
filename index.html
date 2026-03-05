@@ -2264,6 +2264,20 @@
                     y: 0
                 };
                 addFloatingText('SWAP!', cx, fy, COLOR_GOLD);
+                // スワップ後のスポーン衝突チェック
+                if (!canMove(0, 0)) {
+                    if (gameMode === 'mindful') {
+                        isMindfulResetting = true;
+                        mindfulResetFrame = 0;
+                        mindfulResetCount++;
+                        currentPiece = null;
+                        isClearing = false;
+                        isSettling = false;
+                        return;
+                    }
+                    gameOver();
+                    return;
+                }
             } else {
                 // 初回ホールド: 現在のピースを格納し、NEXTキューから補充
                 holdPiece = { shape: currentPiece.shape, color: savedColor };
@@ -2271,6 +2285,20 @@
                 nextPiece = nextPiece2;
                 nextPiece2 = createPiece();
                 addFloatingText('HOLD!', cx, fy, COLOR_GOLD);
+            }
+            // ホールド後のスポーン衝突チェック
+            if (!canMove(0, 0)) {
+                if (gameMode === 'mindful') {
+                    isMindfulResetting = true;
+                    mindfulResetFrame = 0;
+                    mindfulResetCount++;
+                    currentPiece = null;
+                    isClearing = false;
+                    isSettling = false;
+                    return;
+                }
+                gameOver();
+                return;
             }
             playRotateSound();
         }
@@ -2982,7 +3010,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.743', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.744', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4488,7 +4516,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.743', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.744', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5175,6 +5203,20 @@
                         nextPiece = nextPiece2;
                         nextPiece2 = createPiece();
                         holdUsed = false;
+                        // スポーン直後の衝突チェック: 新ピースが配置不可ならゲームオーバー
+                        if (!canMove(0, 0)) {
+                            if (gameMode === 'mindful') {
+                                isMindfulResetting = true;
+                                mindfulResetFrame = 0;
+                                mindfulResetCount++;
+                                currentPiece = null;
+                                isClearing = false;
+                                isSettling = false;
+                                return;
+                            }
+                            gameOver();
+                            return;
+                        }
                     }
                 }
             } else if (currentPiece) {
