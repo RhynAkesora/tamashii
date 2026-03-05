@@ -1721,9 +1721,15 @@
                 ctx.stroke();
             }
 
-            // テキスト
+            // テキスト（ボタン幅に収まるよう自動縮小）
+            let textFs = fs;
+            const maxTextW = w * 0.88;
+            ctx.font = `bold ${textFs}px Arial`;
+            while (ctx.measureText(label).width > maxTextW && textFs > 9) {
+                textFs -= 0.5;
+                ctx.font = `bold ${textFs}px Arial`;
+            }
             ctx.fillStyle = COLOR_TEXT;
-            ctx.font = `bold ${fs}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
@@ -3020,7 +3026,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.745', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.747', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4163,15 +4169,15 @@
             const contentBottom = winBottom - 90;
             const contentH = contentBottom - contentTop;
             const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
-            // ラベル付きスロット(サウンド・言語)はラベル高さ分を加算
+            // ラベル付きスロット(言語のみ)はラベル高さ分を加算
             const labelGap = 18;
             const labelSlotH = btnHeight + labelGap;
             const plainSlotH = btnHeight;
-            const plainCount = isFirstSetup ? 1 : 4;
-            const totalItemH = labelSlotH * 2 + plainSlotH * plainCount;
-            const spacing = Math.max(4, (contentH - totalItemH) / (plainCount + 2));
-            // soundY, langY = ボタンのY座標（ラベルはその上に描画）
-            const soundY = contentTop + spacing + labelGap;
+            const plainCount = isFirstSetup ? 2 : 5;
+            const totalItemH = labelSlotH * 1 + plainSlotH * plainCount;
+            const spacing = Math.max(4, (contentH - totalItemH) / (plainCount + 1));
+            // soundY = プレーンボタン、langY = ラベル付きボタン
+            const soundY = contentTop + spacing;
             const langY = soundY + btnHeight + spacing + labelGap;
             const plainStart = langY + btnHeight + spacing;
             const howToPlayY = isFirstSetup ? -999 : plainStart;
@@ -4437,14 +4443,9 @@
 
             const btns = getSettingsButtons();
 
-            // サウンドラベル
-            ctx.fillStyle = 'rgba(200, 180, 150, 0.7)';
-            ctx.font = 'bold 14px Arial';
-            ctx.fillText(t('sound'), cx, btns.sound.y - 6);
-
-            // サウンドトグルボタン
+            // サウンドトグルボタン（ラベル統合）
             drawSFCButton(btns.sound.x, btns.sound.y, btns.sound.w, btns.sound.h,
-                soundMuted ? 'OFF' : 'ON', soundMuted ? 'gray' : 'green');
+                t('sound') + '  ' + (soundMuted ? 'OFF' : 'ON'), soundMuted ? 'gray' : 'green');
 
             // 言語ラベル
             ctx.fillStyle = 'rgba(200, 180, 150, 0.7)';
@@ -4526,7 +4527,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.745', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.747', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
