@@ -914,8 +914,10 @@
                     fadeState = 'none';
                     fadeAlpha = 0;
                     fadeRAF = null;
+                    redrawCurrentScreen();
                     return;
                 }
+                redrawCurrentScreen();
             } else {
                 fadeRAF = null;
                 return;
@@ -925,6 +927,17 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.globalAlpha = 1;
             fadeRAF = requestAnimationFrame(updateFade);
+        }
+
+        function redrawCurrentScreen() {
+            switch (gameState) {
+                case 'title': drawTitleScreen(); break;
+                case 'settings': drawSettingsScreen(); break;
+                case 'paused': drawPauseScreen(); break;
+                case 'gameOver': drawGameOverScreen(); break;
+                case 'howToPlay': drawHowToPlayScreen(); break;
+                case 'highScores': drawHighScoreScreen(); break;
+            }
         }
 
         function updateAndDrawEffects() {
@@ -3207,7 +3220,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.755', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.756', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4708,7 +4721,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.755', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.756', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
