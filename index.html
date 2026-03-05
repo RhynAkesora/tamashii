@@ -535,7 +535,7 @@
                 mindfulInfo: 'About Mindful Mode',
             }
         };
-        function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
+        function t(key) { const v = STRINGS[currentLang][key]; if (v != null && v !== '') return v; const f = STRINGS['ja'][key]; if (f != null && f !== '') return f; return key; }
 
         // 設定の永続化
         function loadSettings() {
@@ -2981,7 +2981,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.736', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.737', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3262,42 +3262,45 @@
                 ctx.fillText(line, cx, textStartY + i * lineH);
             });
 
-            // サブテキスト（ページ1のみ: 研究出典）
+            // サブテキスト（ページ1のみ: 補足、空なら非表示）
             if (page === 0) {
-                const subKey = `mindfulOnboard1Sub`;
-                const subFs = isSmallScreen ? 10 : 11;
-                ctx.fillStyle = 'rgba(180, 200, 195, 0.5)';
-                ctx.font = `${subFs}px Arial`;
-                ctx.fillText(t(subKey), cx, textStartY + textLines.length * lineH + 16);
+                const subText = STRINGS[currentLang]['mindfulOnboard1Sub'] || STRINGS['ja']['mindfulOnboard1Sub'];
+                if (subText) {
+                    const subFs = isSmallScreen ? 10 : 11;
+                    ctx.fillStyle = 'rgba(180, 200, 195, 0.5)';
+                    ctx.font = `${subFs}px Arial`;
+                    ctx.fillText(subText, cx, textStartY + textLines.length * lineH + 16);
+                }
             }
 
-            // ボタン
-            const btnW = winW * 0.45;
-            const btnH = Math.min(42, H * 0.06);
-            const btnY = winY + winH - 55;
+            // ボタン（横並び: 戻る＋次へ/はじめる）
+            const btnGap = 10;
+            const btnAreaW = winW * 0.72;
+            const btnH = Math.min(38, H * 0.055);
+            const btnY = winY + winH - 50;
+            const backBtnW = btnAreaW * 0.35;
+            const nextBtnW = btnAreaW * 0.60;
+            const btnStartX = cx - btnAreaW / 2;
             mindfulOnboardButtons = [];
 
+            // 戻るボタン（左側・小さめ）
+            const backX = btnStartX;
+            drawSFCButton(backX, btnY, backBtnW, btnH, t('back'), 'gray', isSmallScreen ? 12 : 13);
+            mindfulOnboardButtons.push({ id: 'back', x: backX, y: btnY, w: backBtnW, h: btnH });
+
             if (page < 3) {
-                // 「次へ」ボタン
-                const nextX = cx - btnW / 2;
-                drawSFCButton(nextX, btnY, btnW, btnH, t('mindfulOnboardNext'), 'green');
-                mindfulOnboardButtons.push({ id: 'next', x: nextX, y: btnY, w: btnW, h: btnH });
+                // 「次へ」ボタン（右側）
+                const nextX = btnStartX + backBtnW + btnGap;
+                drawSFCButton(nextX, btnY, nextBtnW, btnH, t('mindfulOnboardNext'), 'green', isSmallScreen ? 14 : 15);
+                mindfulOnboardButtons.push({ id: 'next', x: nextX, y: btnY, w: nextBtnW, h: btnH });
             } else {
                 // 最終ページ: 設定から来た場合は「戻る」、初回は「はじめる」
-                const startX = cx - btnW / 2;
+                const startX = btnStartX + backBtnW + btnGap;
                 const lastLabel = mindfulOnboardReturnTo === 'settings' ? t('back') : t('mindfulOnboardStart');
                 const lastColor = mindfulOnboardReturnTo === 'settings' ? 'blue' : 'green';
-                drawSFCButton(startX, btnY, btnW, btnH, lastLabel, lastColor);
-                mindfulOnboardButtons.push({ id: 'start', x: startX, y: btnY, w: btnW, h: btnH });
+                drawSFCButton(startX, btnY, nextBtnW, btnH, lastLabel, lastColor, isSmallScreen ? 14 : 15);
+                mindfulOnboardButtons.push({ id: 'start', x: startX, y: btnY, w: nextBtnW, h: btnH });
             }
-
-            // 戻るボタン（小さめ、左下）
-            const backBtnW = btnW * 0.6;
-            const backBtnH = btnH * 0.75;
-            const backX = winX + 15;
-            const backY = btnY + (btnH - backBtnH) / 2;
-            drawSFCButton(backX, backY, backBtnW, backBtnH, t('back'), 'gray', isSmallScreen ? 11 : 13);
-            mindfulOnboardButtons.push({ id: 'back', x: backX, y: backY, w: backBtnW, h: backBtnH });
         }
 
         /**
@@ -4470,7 +4473,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.736', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.737', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
