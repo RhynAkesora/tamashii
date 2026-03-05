@@ -2904,8 +2904,8 @@
             drawYogaMonk();
 
             // コンセプトテキスト（SFC風ウィンドウ付き）
-            const conceptFontSize = isSmallScreen ? 13 : 15;
-            const conceptY = isSmallScreen ? H * 0.68 : H * 0.70;
+            const conceptFontSize = isSmallScreen ? 11 : 13;
+            const conceptY = isSmallScreen ? H * 0.64 : H * 0.66;
             const conceptText = t('concept');
             ctx.font = `bold ${conceptFontSize}px Arial`;
             const conceptTw = ctx.measureText(conceptText).width;
@@ -2981,7 +2981,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.735', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.736', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3739,16 +3739,16 @@
          */
         function getHighScoreButtonRect() {
             const isSmallScreen = canvas.height < SMALL_SCREEN_THRESHOLD;
-            const buttonWidth = Math.min(canvas.width * 0.35, 280);
-            const buttonHeight = Math.min(isSmallScreen ? 38 : 44, canvas.height * 0.06);
+            const buttonWidth = Math.min(canvas.width * 0.32, 240);
+            const buttonHeight = Math.min(isSmallScreen ? 34 : 38, canvas.height * 0.05);
             const buttonX = canvas.width / 2 - buttonWidth / 2;
-            const buttonY = canvas.height * (isSmallScreen ? 0.76 : 0.78);
-            return { x: buttonX, y: buttonY, w: buttonWidth, h: Math.max(buttonHeight, 38) };
+            const buttonY = canvas.height * (isSmallScreen ? 0.72 : 0.73);
+            return { x: buttonX, y: buttonY, w: buttonWidth, h: Math.max(buttonHeight, 34) };
         }
         function drawHighScoreButton() {
             const r = getHighScoreButtonRect();
             const isSmallScreen = canvas.height < SMALL_SCREEN_THRESHOLD;
-            drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'blue', isSmallScreen ? 16 : 18);
+            drawSFCButton(r.x, r.y, r.w, r.h, t('highScoreBtn'), 'blue', isSmallScreen ? 14 : 16);
         }
 
         /**
@@ -4470,7 +4470,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.735', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.736', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
