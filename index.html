@@ -593,6 +593,22 @@
         const FEVER_COMBO_THRESHOLD = 3;  // 3コンボで発動
         let pendingAllClear = false;
 
+        // ===== 画面遷移フェード =====
+        let fadeState = 'none'; // 'none' | 'fadeOut' | 'fadeIn'
+        let fadeAlpha = 0;
+        let fadeStartTime = 0;
+        const FADE_DURATION = 300; // ms
+        let fadeCallback = null;
+        let fadeRAF = null;
+
+        // ===== ボタン押下フィードバック =====
+        let pressedButtonId = null;
+        let pressedButtonTimer = null;
+
+        // ===== ゲームオーバーアニメーション =====
+        let gameOverAnimStart = 0;
+        let gameOverAnimRAF = null;
+
         // ===== マインドフルモード =====
         let gameMode = 'classic';           // 'classic' | 'mindful'
         let mindfulTimerDuration = 600;     // 秒（デフォルト10分）
@@ -845,6 +861,49 @@
             }
             shakeIntensity = intensity;
             shakeDuration = duration;
+        }
+
+        function startScreenTransition(callback) {
+            if (fadeState !== 'none') {
+                // フェード中に新たな遷移が来たら即実行
+                if (fadeCallback) fadeCallback();
+                fadeCallback = null;
+            }
+            fadeState = 'fadeOut';
+            fadeAlpha = 0;
+            fadeStartTime = Date.now();
+            fadeCallback = callback;
+            if (!fadeRAF) fadeRAF = requestAnimationFrame(updateFade);
+        }
+
+        function updateFade() {
+            const elapsed = Date.now() - fadeStartTime;
+            if (fadeState === 'fadeOut') {
+                fadeAlpha = Math.min(1, elapsed / FADE_DURATION);
+                if (fadeAlpha >= 1) {
+                    fadeAlpha = 1;
+                    if (fadeCallback) fadeCallback();
+                    fadeCallback = null;
+                    fadeState = 'fadeIn';
+                    fadeStartTime = Date.now();
+                }
+            } else if (fadeState === 'fadeIn') {
+                fadeAlpha = 1 - Math.min(1, elapsed / FADE_DURATION);
+                if (fadeAlpha <= 0) {
+                    fadeState = 'none';
+                    fadeAlpha = 0;
+                    fadeRAF = null;
+                    return;
+                }
+            } else {
+                fadeRAF = null;
+                return;
+            }
+            ctx.globalAlpha = fadeAlpha;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1;
+            fadeRAF = requestAnimationFrame(updateFade);
         }
 
         function updateAndDrawEffects() {
@@ -1655,7 +1714,8 @@
          * @param {string} baseColor - ベースカラー 'blue'|'red'|'green'|'gray'
          * @param {number} [fontSize] - フォントサイズ（省略時は自動）
          */
-        function drawSFCButton(x, y, w, h, label, baseColor, fontSize) {
+        function drawSFCButton(x, y, w, h, label, baseColor, fontSize, pressed) {
+            if (pressed) { y += 2; h -= 2; }
             const r = Math.min(6, h * 0.15); // 角丸
             const fs = fontSize || Math.min(20, h * 0.45);
             // 配色テーブル
@@ -1737,6 +1797,24 @@
             ctx.fillText(label, x + w / 2, y + h / 2);
             ctx.shadowBlur = 0;
             ctx.textBaseline = 'alphabetic';
+            // 押下時: 暗いオーバーレイ
+            if (pressed) {
+                ctx.globalAlpha = 0.25;
+                ctx.fillStyle = '#000';
+                // 角丸パスを再構築
+                ctx.beginPath();
+                ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+                ctx.arcTo(x + w, y, x + w, y + r, r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+                ctx.lineTo(x + r, y + h);
+                ctx.arcTo(x, y + h, x, y + h - r, r);
+                ctx.lineTo(x, y + r);
+                ctx.arcTo(x, y, x + r, y, r);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
         }
 
         /**
@@ -2685,6 +2763,7 @@
                     playerNameInput.focus();
                 } else {
                     playGameOverBGMDelayed();
+                    gameOverAnimStart = Date.now();
                     drawGameOverScreen();
                     gameOverTimers.push(setTimeout(() => {
                         gameOverReady = true;
@@ -2693,6 +2772,7 @@
                 }
             } else {
                 playGameOverBGMDelayed();
+                gameOverAnimStart = Date.now();
                 drawGameOverScreen();
                 gameOverTimers.push(setTimeout(() => {
                     gameOverReady = true;
@@ -3026,7 +3106,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.748', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.749', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4445,7 +4525,7 @@
 
             // サウンドトグルボタン（ラベル統合）
             drawSFCButton(btns.sound.x, btns.sound.y, btns.sound.w, btns.sound.h,
-                t('sound') + '  ' + (soundMuted ? 'OFF' : 'ON'), soundMuted ? 'gray' : 'green');
+                t('sound') + '  ' + (soundMuted ? 'OFF' : 'ON'), soundMuted ? 'gray' : 'green', null, pressedButtonId === 'sound');
 
             // 言語ラベル
             ctx.fillStyle = 'rgba(200, 180, 150, 0.7)';
@@ -4454,33 +4534,33 @@
 
             // 言語選択ボタン（2つ横並び: 選択中=green, 非選択=gray）
             drawSFCButton(btns.langJa.x, btns.langJa.y, btns.langJa.w, btns.langJa.h,
-                '日本語', currentLang === 'ja' ? 'green' : 'gray');
+                '日本語', currentLang === 'ja' ? 'green' : 'gray', null, pressedButtonId === 'langJa');
             drawSFCButton(btns.langEn.x, btns.langEn.y, btns.langEn.w, btns.langEn.h,
-                'English', currentLang === 'en' ? 'green' : 'gray');
+                'English', currentLang === 'en' ? 'green' : 'gray', null, pressedButtonId === 'langEn');
 
             // 遊び方ボタン（初回設定では非表示）
             if (btns.howToPlay.y >= 0) {
                 drawSFCButton(btns.howToPlay.x, btns.howToPlay.y, btns.howToPlay.w, btns.howToPlay.h,
-                    t('howToPlay'), 'blue');
+                    t('howToPlay'), 'blue', null, pressedButtonId === 'howToPlay');
             }
 
             // マインドフルモードとはボタン（初回設定では非表示）
             if (btns.mindfulInfo.y >= 0) {
                 drawSFCButton(btns.mindfulInfo.x, btns.mindfulInfo.y, btns.mindfulInfo.w, btns.mindfulInfo.h,
-                    t('mindfulInfo'), 'green');
+                    t('mindfulInfo'), 'green', null, pressedButtonId === 'mindfulInfo');
             }
 
             // お問い合わせボタン（初回設定では非表示）
             if (btns.contact.y >= 0) {
                 drawSFCButton(btns.contact.x, btns.contact.y, btns.contact.w, btns.contact.h,
-                    t('contact'), 'blue');
+                    t('contact'), 'blue', null, pressedButtonId === 'contact');
             }
 
             // 戻る/進むボタン
             if (settingsReturnTo === 'playing' && !shownTutorial) {
-                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('proceed'), 'green');
+                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('proceed'), 'green', null, pressedButtonId === 'back');
             } else {
-                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('back'), 'red');
+                drawSFCButton(btns.back.x, btns.back.y, btns.back.w, btns.back.h, t('back'), 'red', null, pressedButtonId === 'back');
             }
 
             // プライバシーポリシー・利用規約テキストリンク
@@ -4527,7 +4607,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.748', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.749', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4536,37 +4616,40 @@
          * セッティング画面のタップ処理
          */
         function handleSettingsTap(x, y) {
+            if (pressedButtonId) return; // 押下アニメ中は無視
             const btns = getSettingsButtons();
             const hit = (b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
 
+            // ボタン押下フィードバックヘルパー
+            const pressAndDo = (id, action) => {
+                pressedButtonId = id;
+                drawSettingsScreen();
+                clearTimeout(pressedButtonTimer);
+                pressedButtonTimer = setTimeout(() => { pressedButtonId = null; action(); }, 80);
+            };
+
             if (hit(btns.sound)) {
-                toggleSound();
-                drawSettingsScreen();
+                pressAndDo('sound', () => { toggleSound(); drawSettingsScreen(); });
             } else if (hit(btns.langJa) && currentLang !== 'ja') {
-                currentLang = 'ja';
-                saveSettings();
-                updateHTMLText();
-                prevScoreText = '';
-                updateScoreDisplay();
-                drawSettingsScreen();
+                pressAndDo('langJa', () => {
+                    currentLang = 'ja'; saveSettings(); updateHTMLText();
+                    prevScoreText = ''; updateScoreDisplay(); drawSettingsScreen();
+                });
             } else if (hit(btns.langEn) && currentLang !== 'en') {
-                currentLang = 'en';
-                saveSettings();
-                updateHTMLText();
-                prevScoreText = '';
-                updateScoreDisplay();
-                drawSettingsScreen();
+                pressAndDo('langEn', () => {
+                    currentLang = 'en'; saveSettings(); updateHTMLText();
+                    prevScoreText = ''; updateScoreDisplay(); drawSettingsScreen();
+                });
             } else if (hit(btns.howToPlay) && btns.howToPlay.y >= 0) {
-                howToPlayReturnTo = 'settings';
-                howToPlayShownAt = Date.now();
-                gameState = 'howToPlay';
-                drawHowToPlayScreen();
+                pressAndDo('howToPlay', () => {
+                    howToPlayReturnTo = 'settings'; howToPlayShownAt = Date.now();
+                    gameState = 'howToPlay'; drawHowToPlayScreen();
+                });
             } else if (btns.mindfulInfo.y >= 0 && hit(btns.mindfulInfo)) {
-                // マインドフルモードの説明を表示（オンボーディング画面を再利用）
-                mindfulOnboardPage = 0;
-                gameState = 'mindfulOnboard';
-                mindfulOnboardReturnTo = 'settings';
-                drawMindfulOnboardScreen();
+                pressAndDo('mindfulInfo', () => {
+                    mindfulOnboardPage = 0; gameState = 'mindfulOnboard';
+                    mindfulOnboardReturnTo = 'settings'; drawMindfulOnboardScreen();
+                });
             } else if (btns.privacyLink.y >= 0 && hit(btns.privacyLink)) {
                 const privacyUrl = currentLang === 'en'
                     ? 'https://nullpoworks.github.io/privacy-policy-en.html'
@@ -4578,23 +4661,23 @@
                     : 'https://nullpoworks.github.io/terms-tamashii.html';
                 window.open(termsUrl, '_blank');
             } else if (hit(btns.contact) && btns.contact.y >= 0) {
-                window.open('https://nullpoworks.github.io/contact.html', '_blank');
+                pressAndDo('contact', () => {
+                    window.open('https://nullpoworks.github.io/contact.html', '_blank');
+                    pressedButtonId = null; drawSettingsScreen();
+                });
             } else if (hit(btns.back)) {
-                if (settingsReturnTo === 'playing' && !shownTutorial) {
-                    // 初回: 設定→遊び方画面→ゲーム開始
-                    shownTutorial = true;
-                    localStorage.setItem('tamashii_shown_tutorial', '1');
-                    howToPlayReturnTo = 'playing';
-                    howToPlayShownAt = Date.now();
-                    gameState = 'howToPlay';
-                    drawHowToPlayScreen();
-                } else if (settingsReturnTo === 'paused') {
-                    gameState = 'paused';
-                    drawPauseScreen();
-                } else {
-                    gameState = 'title';
-                    drawTitleScreen();
-                }
+                pressAndDo('back', () => {
+                    if (settingsReturnTo === 'playing' && !shownTutorial) {
+                        shownTutorial = true;
+                        localStorage.setItem('tamashii_shown_tutorial', '1');
+                        howToPlayReturnTo = 'playing'; howToPlayShownAt = Date.now();
+                        gameState = 'howToPlay'; drawHowToPlayScreen();
+                    } else if (settingsReturnTo === 'paused') {
+                        startScreenTransition(() => { gameState = 'paused'; drawPauseScreen(); });
+                    } else {
+                        startScreenTransition(() => { gameState = 'title'; drawTitleScreen(); });
+                    }
+                });
             }
         }
 
@@ -4746,6 +4829,12 @@
          */
         function drawGameOverScreen() {
             const W = canvas.width, H = canvas.height, cx = W / 2;
+            const animElapsed = gameOverAnimStart > 0 ? Date.now() - gameOverAnimStart : 9999;
+            // フェードインヘルパー（200msかけて0→1）
+            const elemAlpha = (startMs) => {
+                if (animElapsed < startMs) return 0;
+                return Math.min(1, (animElapsed - startMs) / 200);
+            };
 
             // SFC風背景
             const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -4764,60 +4853,76 @@
             const baseY = winY + winH * 0.12;
             ctx.textAlign = 'center';
 
-            // タイトル（赤 + グロー）
-            ctx.fillStyle = '#ff4444';
-            ctx.font = 'bold 28px Arial';
-            ctx.shadowColor = 'rgba(255, 50, 50, 0.5)';
-            ctx.shadowBlur = 8;
-            ctx.fillText(t('gameOver'), cx, baseY);
-            ctx.shadowBlur = 0;
-
-            // 装飾ライン
-            ctx.strokeStyle = 'rgba(192, 160, 64, 0.4)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(cx - 100, baseY + 12); ctx.lineTo(cx + 100, baseY + 12);
-            ctx.stroke();
-
-            // スコア（大きく強調）
-            ctx.fillStyle = COLOR_GOLD;
-            ctx.font = 'bold 36px Arial';
-            ctx.shadowColor = 'rgba(255, 200, 0, 0.4)';
-            ctx.shadowBlur = 6;
-            ctx.fillText(`${score.toLocaleString()}`, cx, baseY + 55);
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = 'rgba(200, 180, 140, 0.5)';
-            ctx.font = '14px Arial';
-            ctx.fillText(t('scoreLabel'), cx, baseY + 75);
-
-            // ランクイン表示
-            if (rankPosition > 0) {
-                ctx.fillStyle = '#ff88ff';
-                ctx.font = 'bold 18px Arial';
-                ctx.shadowColor = 'rgba(255, 100, 255, 0.5)';
-                ctx.shadowBlur = 6;
-                const rankText = currentLang === 'ja'
-                    ? `${rankPosition}${t('rankIn')}`
-                    : `#${rankPosition}${t('rankIn')}`;
-                ctx.fillText(rankText, cx, baseY + 95);
+            // タイトル（赤 + グロー）: 0ms～
+            const titleAlpha = elemAlpha(0);
+            if (titleAlpha > 0) {
+                ctx.globalAlpha = titleAlpha;
+                ctx.fillStyle = '#ff4444';
+                ctx.font = 'bold 28px Arial';
+                ctx.shadowColor = 'rgba(255, 50, 50, 0.5)';
+                ctx.shadowBlur = 8;
+                ctx.fillText(t('gameOver'), cx, baseY);
                 ctx.shadowBlur = 0;
+
+                // 装飾ライン
+                ctx.strokeStyle = 'rgba(192, 160, 64, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx - 100, baseY + 12); ctx.lineTo(cx + 100, baseY + 12);
+                ctx.stroke();
             }
 
-            // 自己ベスト更新表示
+            // スコア（大きく強調）: 200ms～
+            const scoreAlpha = elemAlpha(200);
+            if (scoreAlpha > 0) {
+                ctx.globalAlpha = scoreAlpha;
+                ctx.fillStyle = COLOR_GOLD;
+                ctx.font = 'bold 36px Arial';
+                ctx.shadowColor = 'rgba(255, 200, 0, 0.4)';
+                ctx.shadowBlur = 6;
+                ctx.fillText(`${score.toLocaleString()}`, cx, baseY + 55);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(200, 180, 140, 0.5)';
+                ctx.font = '14px Arial';
+                ctx.fillText(t('scoreLabel'), cx, baseY + 75);
+            }
+
+            // ランクイン表示: 400ms～
+            if (rankPosition > 0) {
+                const rankAlpha = elemAlpha(400);
+                if (rankAlpha > 0) {
+                    ctx.globalAlpha = rankAlpha;
+                    ctx.fillStyle = '#ff88ff';
+                    ctx.font = 'bold 18px Arial';
+                    ctx.shadowColor = 'rgba(255, 100, 255, 0.5)';
+                    ctx.shadowBlur = 6;
+                    const rankText = currentLang === 'ja'
+                        ? `${rankPosition}${t('rankIn')}`
+                        : `#${rankPosition}${t('rankIn')}`;
+                    ctx.fillText(rankText, cx, baseY + 95);
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            // 自己ベスト更新表示: 500ms～
             let personalBestOffset = 0;
             if (isNewPersonalBest) {
+                const pbAlpha = elemAlpha(500);
                 const pbY = baseY + (rankPosition > 0 ? 115 : 100);
-                ctx.fillStyle = '#ffdd44';
-                ctx.font = 'bold 20px Arial';
-                ctx.textAlign = 'center';
-                ctx.shadowColor = 'rgba(255, 220, 50, 0.7)';
-                ctx.shadowBlur = 10;
-                ctx.fillText(t('newPersonalBest'), cx, pbY);
-                ctx.shadowBlur = 0;
+                if (pbAlpha > 0) {
+                    ctx.globalAlpha = pbAlpha;
+                    ctx.fillStyle = '#ffdd44';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(255, 220, 50, 0.7)';
+                    ctx.shadowBlur = 10;
+                    ctx.fillText(t('newPersonalBest'), cx, pbY);
+                    ctx.shadowBlur = 0;
+                }
                 personalBestOffset = 25;
             }
 
-            // 統計情報
+            // 統計情報: 600ms～（各行100msずらし）
             const statY = baseY + (rankPosition > 0 ? 125 : 110) + personalBestOffset;
             const lineH = 32;
             const finalLevel = Math.floor(totalLinesCleared / SPEED_INCREASE_INTERVAL) + 1;
@@ -4833,6 +4938,9 @@
             ];
 
             for (let i = 0; i < stats.length; i++) {
+                const sAlpha = elemAlpha(600 + i * 100);
+                if (sAlpha <= 0) continue;
+                ctx.globalAlpha = sAlpha;
                 const y = statY + i * lineH;
                 ctx.fillStyle = 'rgba(200, 180, 150, 0.6)';
                 ctx.font = '15px Arial';
@@ -4844,11 +4952,27 @@
                 ctx.fillText(stats[i].value, cx + 10, y);
             }
 
-            // ボタン群（SFC風）
+            // ボタン群（SFC風）: 1200ms～
             if (gameOverReady) {
-                const btns = getGameOverButtons(statY + stats.length * lineH + 20, W, cx);
-                drawSFCButton(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h, t('retry'), 'red');
-                drawSFCButton(btns.title.x, btns.title.y, btns.title.w, btns.title.h, t('returnToTitle'), 'blue');
+                const btnAlpha = elemAlpha(1200);
+                if (btnAlpha > 0) {
+                    ctx.globalAlpha = btnAlpha;
+                    const btns = getGameOverButtons(statY + stats.length * lineH + 20, W, cx);
+                    drawSFCButton(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h, t('retry'), 'red', null, pressedButtonId === 'go_retry');
+                    drawSFCButton(btns.title.x, btns.title.y, btns.title.w, btns.title.h, t('returnToTitle'), 'blue', null, pressedButtonId === 'go_title');
+                }
+            }
+
+            ctx.globalAlpha = 1;
+
+            // アニメーション自走: 全要素表示完了まで再描画を繰り返す
+            if (gameOverAnimStart > 0 && animElapsed < 1500 && gameState === 'gameOver') {
+                if (gameOverAnimRAF) cancelAnimationFrame(gameOverAnimRAF);
+                gameOverAnimRAF = requestAnimationFrame(() => {
+                    if (gameState === 'gameOver') drawGameOverScreen();
+                });
+            } else {
+                gameOverAnimRAF = null;
             }
         }
 
@@ -5572,15 +5696,16 @@
                 case 'title':
                     if (isGearButtonTapped(x, y)) {
                         settingsReturnTo = 'title';
-                        gameState = 'settings';
-                        drawSettingsScreen();
+                        startScreenTransition(() => { gameState = 'settings'; drawSettingsScreen(); });
                     } else if (isHighScoreButtonTapped(x, y)) {
                         playHighScoreBGM();
-                        gameState = 'highscore';
-                        hsScrollY = 0;
-                        hsScrollVelocity = 0;
-                        resizeCanvas();
-                        drawHighScoreScreen(true);
+                        startScreenTransition(() => {
+                            gameState = 'highscore';
+                            hsScrollY = 0;
+                            hsScrollVelocity = 0;
+                            resizeCanvas();
+                            drawHighScoreScreen(true);
+                        });
                         await fetchHighScores();
                         if (gameState === 'highscore') drawHighScoreScreen(false);
                     } else {
@@ -5621,9 +5746,7 @@
                         if (btn.id === 'sessionBack' && x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                             gameMode = 'classic';
                             stopMindfulAmbient();
-                            gameState = 'title';
-                            playTitleBGM();
-                            drawTitleScreen();
+                            startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
                             break;
                         }
                     }
@@ -5633,14 +5756,12 @@
                     if (x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) {
                         if (hsAnimFrame) { cancelAnimationFrame(hsAnimFrame); hsAnimFrame = null; }
                         playTitleBGM();
-                        gameState = 'title';
-                        resizeCanvas();
-                        drawTitleScreen();
+                        startScreenTransition(() => { gameState = 'title'; resizeCanvas(); drawTitleScreen(); });
                     }
                     break;
                 }
                 case 'gameOver': {
-                    if (!gameOverReady) return;
+                    if (!gameOverReady || pressedButtonId) return;
                     // ボタン位置を再計算してヒット判定
                     const goW = canvas.width, goCx = goW / 2;
                     const goWinMargin = Math.max(16, goW * 0.06);
@@ -5650,15 +5771,22 @@
                     const goBtns = getGameOverButtons(goStatY + 4 * 32 + 20, goW, goCx);
                     if (x >= goBtns.retry.x && x <= goBtns.retry.x + goBtns.retry.w &&
                         y >= goBtns.retry.y && y <= goBtns.retry.y + goBtns.retry.h) {
-                        // リトライ: 同じモードで即座にゲーム再開
-                        stopAllBGM();
-                        resetGame();
+                        // リトライ: 押下フィードバック→遷移
+                        pressedButtonId = 'go_retry';
+                        drawGameOverScreen();
+                        pressedButtonTimer = setTimeout(() => {
+                            pressedButtonId = null;
+                            startScreenTransition(() => { stopAllBGM(); resetGame(); });
+                        }, 80);
                     } else if (x >= goBtns.title.x && x <= goBtns.title.x + goBtns.title.w &&
                                y >= goBtns.title.y && y <= goBtns.title.y + goBtns.title.h) {
-                        // タイトルへ戻る
-                        gameState = 'title';
-                        playTitleBGM();
-                        drawTitleScreen();
+                        // タイトルへ戻る: 押下フィードバック→遷移
+                        pressedButtonId = 'go_title';
+                        drawGameOverScreen();
+                        pressedButtonTimer = setTimeout(() => {
+                            pressedButtonId = null;
+                            startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
+                        }, 80);
                     }
                     break;
                 }
@@ -5888,6 +6016,7 @@
                 stopAllBGM();
                 playGameOverBGM();
                 gameOverReady = false;
+                gameOverAnimStart = Date.now();
                 drawGameOverScreen();
                 gameOverTimers.push(setTimeout(() => {
                     gameOverReady = true;
