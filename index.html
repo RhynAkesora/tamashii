@@ -463,6 +463,7 @@
                 mindfulOnboard4Text: '深呼吸をひとつして\nリラックスしてから\nはじめてみてください。\n\n心が少し軽くなるかもしれません。',
                 mindfulOnboardNext: '次へ',
                 mindfulOnboardStart: 'はじめる',
+                mindfulInfo: 'マインドフルモードとは',
             },
             en: {
                 titleFallback: 'Soul Resonance', subtitle: '~Believe in Me~',
@@ -531,6 +532,7 @@
                 mindfulOnboard4Text: 'Take a deep breath\nand relax before\nyou start.\n\nYour mind may feel\na little lighter afterward.',
                 mindfulOnboardNext: 'Next',
                 mindfulOnboardStart: 'Start',
+                mindfulInfo: 'About Mindful Mode',
             }
         };
         function t(key) { return STRINGS[currentLang][key] || STRINGS['ja'][key] || key; }
@@ -595,6 +597,7 @@
         let shownMindfulTutorial = false;   // マインドフル初回チュートリアル済みフラグ
         let mindfulOnboardPage = 0;         // オンボーディングページ (0-3)
         let mindfulOnboardButtons = [];     // オンボーディングボタン座標
+        let mindfulOnboardReturnTo = '';    // 'settings' or '' (タイトルからの初回)
         let titleModeButtons = [];          // タイトル画面のモードボタン座標
         let mindfulComboHue = 0;            // コンボ色変化用色相
         let mindfulAmbientGain = null;      // 環境音ゲインノード
@@ -2978,7 +2981,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.732', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.733', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3280,9 +3283,11 @@
                 drawSFCButton(nextX, btnY, btnW, btnH, t('mindfulOnboardNext'), 'green');
                 mindfulOnboardButtons.push({ id: 'next', x: nextX, y: btnY, w: btnW, h: btnH });
             } else {
-                // 最終ページ: 「はじめる」ボタン
+                // 最終ページ: 設定から来た場合は「戻る」、初回は「はじめる」
                 const startX = cx - btnW / 2;
-                drawSFCButton(startX, btnY, btnW, btnH, t('mindfulOnboardStart'), 'green');
+                const lastLabel = mindfulOnboardReturnTo === 'settings' ? t('back') : t('mindfulOnboardStart');
+                const lastColor = mindfulOnboardReturnTo === 'settings' ? 'blue' : 'green';
+                drawSFCButton(startX, btnY, btnW, btnH, lastLabel, lastColor);
                 mindfulOnboardButtons.push({ id: 'start', x: startX, y: btnY, w: btnW, h: btnH });
             }
 
@@ -3305,17 +3310,29 @@
                         mindfulOnboardPage++;
                         drawMindfulOnboardScreen();
                     } else if (btn.id === 'start') {
-                        // オンボーディング完了 → 永続化 → タイマー選択へ
-                        shownMindfulTutorial = true;
-                        try { localStorage.setItem('tamashii_shown_mindful_tutorial', '1'); } catch(e) {}
-                        gameState = 'timerSelect';
-                        drawTimerSelectScreen();
+                        if (mindfulOnboardReturnTo === 'settings') {
+                            // 設定画面から来た場合 → 設定に戻る
+                            mindfulOnboardReturnTo = '';
+                            gameState = 'settings';
+                            drawSettingsScreen();
+                        } else {
+                            // 初回オンボーディング → 永続化 → タイマー選択へ
+                            shownMindfulTutorial = true;
+                            try { localStorage.setItem('tamashii_shown_mindful_tutorial', '1'); } catch(e) {}
+                            gameState = 'timerSelect';
+                            drawTimerSelectScreen();
+                        }
                     } else if (btn.id === 'back') {
                         if (mindfulOnboardPage > 0) {
                             mindfulOnboardPage--;
                             drawMindfulOnboardScreen();
+                        } else if (mindfulOnboardReturnTo === 'settings') {
+                            // 設定画面から来た場合 → 設定に戻る
+                            mindfulOnboardReturnTo = '';
+                            gameState = 'settings';
+                            drawSettingsScreen();
                         } else {
-                            // 最初のページで戻る → タイトルへ
+                            // タイトルからの初回 → タイトルへ
                             gameMode = 'classic';
                             gameState = 'title';
                             drawTitleScreen();
@@ -4096,16 +4113,17 @@
             const contentTop = winY + 70;
             const contentBottom = winBottom - 70;
             const contentH = contentBottom - contentTop;
-            // 初回設定では遊び方ボタンを非表示（3段）、通常は7段
+            // 初回設定では遊び方ボタンを非表示（3段）、通常は8段
             const isFirstSetup = settingsReturnTo === 'playing' && !shownTutorial;
-            const slots = isFirstSetup ? 3 : 7;
+            const slots = isFirstSetup ? 3 : 8;
             const gap = contentH / slots;
             const soundY = contentTop + gap * 0.5 - btnHeight / 2;
             const langY = contentTop + gap * 1.5 - btnHeight / 2;
             const howToPlayY = isFirstSetup ? -999 : contentTop + gap * 2.5 - btnHeight / 2;
-            const privacyY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
-            const termsY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
-            const contactY = isFirstSetup ? -999 : contentTop + gap * 5.5 - btnHeight / 2;
+            const mindfulInfoY = isFirstSetup ? -999 : contentTop + gap * 3.5 - btnHeight / 2;
+            const privacyY = isFirstSetup ? -999 : contentTop + gap * 4.5 - btnHeight / 2;
+            const termsY = isFirstSetup ? -999 : contentTop + gap * 5.5 - btnHeight / 2;
+            const contactY = isFirstSetup ? -999 : contentTop + gap * 6.5 - btnHeight / 2;
             const backY = contentTop + gap * (slots - 0.5) - btnHeight / 2;
             // 言語: 2つの横並びボタン
             const langGap = 10;
@@ -4115,6 +4133,7 @@
                 langJa:   { x: btnX, y: langY, w: langBtnW, h: btnHeight },
                 langEn:   { x: btnX + langBtnW + langGap, y: langY, w: langBtnW, h: btnHeight },
                 howToPlay:{ x: btnX, y: howToPlayY, w: btnWidth, h: btnHeight },
+                mindfulInfo: { x: btnX, y: mindfulInfoY, w: btnWidth, h: btnHeight },
                 privacy:  { x: btnX, y: privacyY, w: btnWidth, h: btnHeight },
                 terms:    { x: btnX, y: termsY, w: btnWidth, h: btnHeight },
                 contact:  { x: btnX, y: contactY, w: btnWidth, h: btnHeight },
@@ -4384,6 +4403,12 @@
                     t('howToPlay'), 'blue');
             }
 
+            // マインドフルモードとはボタン（初回設定では非表示）
+            if (btns.mindfulInfo.y >= 0) {
+                drawSFCButton(btns.mindfulInfo.x, btns.mindfulInfo.y, btns.mindfulInfo.w, btns.mindfulInfo.h,
+                    t('mindfulInfo'), 'green');
+            }
+
             // プライバシーポリシーボタン（初回設定では非表示）
             if (btns.privacy.y >= 0) {
                 drawSFCButton(btns.privacy.x, btns.privacy.y, btns.privacy.w, btns.privacy.h,
@@ -4414,7 +4439,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.732', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.733', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -4463,6 +4488,15 @@
                 howToPlayShownAt = Date.now();
                 gameState = 'howToPlay';
                 drawHowToPlayScreen();
+            } else if (btns.mindfulInfo.y >= 0 &&
+                       x >= btns.mindfulInfo.x && x <= btns.mindfulInfo.x + btns.mindfulInfo.w &&
+                       y >= btns.mindfulInfo.y && y <= btns.mindfulInfo.y + btns.mindfulInfo.h) {
+                // マインドフルモードの説明を表示（オンボーディング画面を再利用）
+                mindfulOnboardPage = 0;
+                gameState = 'mindfulOnboard';
+                // 設定画面から来たことを記録（戻り先用）
+                mindfulOnboardReturnTo = 'settings';
+                drawMindfulOnboardScreen();
             } else if (hitPrivacy) {
                 const privacyUrl = currentLang === 'en'
                     ? 'https://nullpoworks.github.io/privacy-policy-en.html'
@@ -5473,6 +5507,7 @@
                                     if (!shownMindfulTutorial) {
                                         // 初回: オンボーディング表示
                                         mindfulOnboardPage = 0;
+                                        mindfulOnboardReturnTo = '';
                                         gameState = 'mindfulOnboard';
                                         drawMindfulOnboardScreen();
                                     } else {
