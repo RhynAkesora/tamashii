@@ -333,6 +333,8 @@
         // ===== ロックディレイ・ソフトドロップ =====
         let lockDelayTimer = 0;
         let lockDelayMoveCount = 0;
+        let isHardDrop = false;
+        let levelUpFlashTimer = 0;
         let softDropTimer = null;
         let softDropInterval = null;
         let isSoftDropping = false;
@@ -783,6 +785,23 @@
             noiseSource.connect(filter).connect(gainNode).connect(masterGain);
             noiseSource.start(now);
             noiseSource.stop(now + 0.1);
+        }
+
+        function playLevelUpSound() {
+            if (!soundsEnabled || !audioCtx) return;
+            const now = audioCtx.currentTime;
+            [0, 0.1].forEach((delay, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = 600 + i * 200;
+                gain.gain.setValueAtTime(0.3, now + delay);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + delay);
+                osc.stop(now + delay + 0.3);
+            });
         }
 
         function playClearSound(currentCombo) {
@@ -1372,7 +1391,7 @@
                 ctx.fillStyle = cachedDangerGrad1;
                 ctx.fillRect(0, 0, gameAreaWidth, h);
             } else if (level === 2) {
-                // 危険: 濃い赤 + 点滅（グラデーションキャッシュ）
+                // 危険: 濃い赤 + 高速点滅（グラデーションキャッシュ）
                 const h2 = cellSize * 5;
                 if (cachedDangerGrad2Key !== h2) {
                     cachedDangerGrad2 = ctx.createLinearGradient(0, 0, 0, h2);
@@ -1380,18 +1399,25 @@
                     cachedDangerGrad2.addColorStop(1, 'rgba(255, 0, 0, 0)');
                     cachedDangerGrad2Key = h2;
                 }
-                const blink = Math.sin(frameCount * 0.3) * 0.5 + 0.5;
-                ctx.globalAlpha = 0.2 + blink * 0.25;
+                const blink = Math.sin(frameCount * 0.5) * 0.5 + 0.5;
+                ctx.globalAlpha = 0.25 + blink * 0.3;
                 ctx.fillStyle = cachedDangerGrad2;
                 ctx.fillRect(0, 0, gameAreaWidth, h2);
                 ctx.globalAlpha = 1.0;
 
-                // DANGERテキスト
-                ctx.globalAlpha = 0.4 + blink * 0.4;
+                // 赤い枠線（点滅）
+                ctx.globalAlpha = 0.3 + blink * 0.5;
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(1.5, 1.5, gameAreaWidth - 3, (gameGridHeight || canvas.height) - 3);
+                ctx.globalAlpha = 1.0;
+
+                // DANGERテキスト（拡大 + 点滅強化）
+                ctx.globalAlpha = 0.5 + blink * 0.5;
                 ctx.fillStyle = '#ff0000';
-                ctx.font = `bold ${Math.max(16, cellSize * 1.5)}px Arial`;
+                ctx.font = `bold ${Math.max(20, cellSize * 2)}px Arial`;
                 ctx.textAlign = 'center';
-                ctx.fillText(t('danger'), gameAreaWidth / 2, cellSize * 2);
+                ctx.fillText(t('danger'), gameAreaWidth / 2, cellSize * 2.5);
                 ctx.globalAlpha = 1.0;
             }
         }
@@ -2496,7 +2522,28 @@
                     }
                 }
             }
-            triggerScreenShake(2, 4);
+            // ハードドロップ衝撃波
+            if (isHardDrop) {
+                const waveY = (bottomY + 1) * cellSize;
+                const waveX = (impactCells.reduce((s, c) => s + c.gx, 0) / impactCells.length + 0.5) * cellSize;
+                for (let i = 0; i < 12; i++) {
+                    const dir = (i < 6) ? -1 : 1;
+                    visualEffects.push({
+                        x: waveX,
+                        y: waveY,
+                        vx: dir * (Math.random() * 4 + 2),
+                        vy: -(Math.random() * 1.5),
+                        color: pieceColor,
+                        alpha: 1.0,
+                        size: Math.random() * 2 + 1,
+                        lifespan: 20 + Math.floor(Math.random() * 10)
+                    });
+                }
+                triggerScreenShake(4, 6);
+                isHardDrop = false;
+            } else {
+                triggerScreenShake(2, 4);
+            }
             currentPiece = null;
             isSettling = true;
             comboCount = 0;
@@ -3160,7 +3207,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.752', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.755', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4661,7 +4708,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.752', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.755', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5053,6 +5100,8 @@
             floatingTexts = [];
             visualEffects = [];
             shootingStars = [];
+            levelUpFlashTimer = 0;
+            isHardDrop = false;
             score = 0;
             comboCount = 0;
             maxCombo = 0;
@@ -5315,6 +5364,28 @@
 
                     if(currentLinesTier > prevLinesTier && gameMode !== 'mindful') {
                         fallSpeed = Math.max(1, fallSpeed * SPEED_INCREASE_RATE);
+
+                        // レベルアップ演出
+                        const newLevel = currentLinesTier + 1;
+                        const lvAreaW = cellSize * gridWidth;
+                        const lvAreaH = gameGridHeight || canvas.height;
+                        addFloatingText(`LEVEL ${newLevel}!`, lvAreaW / 2, lvAreaH * 0.4, '#88ccff');
+                        levelUpFlashTimer = 15;
+                        for (let i = 0; i < 16; i++) {
+                            const fromLeft = i < 8;
+                            visualEffects.push({
+                                x: fromLeft ? 0 : lvAreaW,
+                                y: Math.random() * lvAreaH,
+                                vx: (fromLeft ? 1 : -1) * (Math.random() * 3 + 2),
+                                vy: (Math.random() - 0.5) * 2,
+                                color: '#88ccff',
+                                alpha: 1.0,
+                                size: Math.random() * 2 + 1.5,
+                                lifespan: 40 + Math.floor(Math.random() * 20)
+                            });
+                        }
+                        triggerScreenShake(3, 8);
+                        playLevelUpSound();
                     }
 
                     isSettling = true;
@@ -5469,6 +5540,15 @@
             if (isFlashing) drawFlashEffect();
             const dangerLevel = getDangerLevel();
             if (dangerLevel > 0) drawDangerWarning(dangerLevel);
+            // レベルアップフラッシュ
+            if (levelUpFlashTimer > 0) {
+                const flashAlpha = levelUpFlashTimer / 15 * 0.3;
+                ctx.globalAlpha = flashAlpha;
+                ctx.fillStyle = '#88ccff';
+                ctx.fillRect(0, 0, cellSize * gridWidth, gameGridHeight || canvas.height);
+                ctx.globalAlpha = 1.0;
+                levelUpFlashTimer--;
+            }
             if (currentPiece && !isSettling && !isClearing && !isFlashing) {
                 drawGhostPiece();
                 drawPiece();
@@ -5670,6 +5750,7 @@
                         currentPiece.y++;
                         score += 1;
                     }
+                    isHardDrop = true;
                     mergePiece();
                     isSettling = true;
                     break;
