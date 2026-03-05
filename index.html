@@ -456,7 +456,7 @@
                 mindfulOnboard1Text: 'パズルゲームには\nただ遊ぶだけで\n気持ちが落ち着くような\n不思議な魅力があります。',
                 mindfulOnboard1Sub: '— パズルゲームが心を穏やかにする可能性に関する\nOxford大学の研究に着想を得て作りました —',
                 mindfulOnboard2Title: 'マインドフルモードとは',
-                mindfulOnboard2Text: 'ゲームオーバーがありません。\nブロックが積み上がっても\n砂のように流れてリセットされます。\n\n焦らず、自分のペースで\n遊ぶことができます。',
+                mindfulOnboard2Text: '一つのことに意識を向けること。\nそれが「マインドフル」です。\n\nゲームオーバーはありません。\nブロックが積み上がっても\n砂のように流れてリセットされます。\n\n焦らず、自分のペースで\n遊ぶことができます。',
                 mindfulOnboard3Title: '遊び方',
                 mindfulOnboard3Text: '操作はノーマルモードと同じです。\n\nスコアはありません。\n選んだ時間が来たら\nセッション終了です。\n\nただ、砂と向き合う時間を\n楽しんでください。',
                 mindfulOnboard4Title: 'はじめましょう',
@@ -525,7 +525,7 @@
                 mindfulOnboard1Text: 'Puzzle games have a\nwonderful way of helping\nyou unwind and find\na moment of calm.',
                 mindfulOnboard1Sub: '— Inspired by research at the University of Oxford\non the potential of puzzle games to ease the mind —',
                 mindfulOnboard2Title: 'What is Mindful Mode?',
-                mindfulOnboard2Text: "There's no game over.\nWhen blocks pile up,\nthey flow away like sand\nand reset automatically.\n\nPlay at your own pace,\nwithout any pressure.",
+                mindfulOnboard2Text: "Focusing on one thing\nin the present moment —\nthat is being \"mindful.\"\n\nThere's no game over.\nWhen blocks pile up,\nthey flow away like sand\nand reset.\n\nPlay at your own pace,\nwithout any pressure.",
                 mindfulOnboard3Title: 'How to Play',
                 mindfulOnboard3Text: 'Controls are the same\nas Normal mode.\n\nThere is no score.\nWhen your chosen time is up,\nthe session ends.\n\nJust enjoy your time\nwith the flowing sand.',
                 mindfulOnboard4Title: "Let's begin",
@@ -2982,7 +2982,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.741', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.742', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3254,11 +3254,14 @@
             // 本文
             const textKey = `mindfulOnboard${page + 1}Text`;
             const textFs = isSmallScreen ? 13 : 15;
-            const lineH = textFs + 6;
             ctx.fillStyle = 'rgba(220, 240, 235, 0.85)';
             ctx.font = `${textFs}px Arial`;
             const textLines = t(textKey).split('\n');
             const textStartY = winY + 85;
+            // 行数が多い場合は行間を詰める
+            const maxLineH = textFs + 6;
+            const availH = (winY + winH - 70) - textStartY; // ボタン領域までの高さ
+            const lineH = Math.min(maxLineH, availH / textLines.length);
             textLines.forEach((line, i) => {
                 ctx.fillText(line, cx, textStartY + i * lineH);
             });
@@ -4485,7 +4488,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.741', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.742', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
