@@ -360,6 +360,8 @@
         let gameOverReady = false;
         let gameOverInProgress = false;
         let gameOverTimers = [];
+        let highScoreCheckSkipped = false;
+        let pendingAfterScoreAction = null;
         let rankPosition = 0;
         // localStorageキーを tamashii_ プレフィックスに統一（旧キーからの移行も対応）
         let personalBest = JSON.parse(localStorage.getItem('tamashii_personalBest') || localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
@@ -439,6 +441,7 @@
                 personalBest: '自己ベスト',
                 newPersonalBest: '自己ベスト更新！',
                 retry: 'もう一度',
+                reviveWithAd: '広告を見て復活',
                 // モード選択
                 modeSelectTitle: 'モード選択',
                 modeNormal: 'ノーマル',
@@ -513,6 +516,7 @@
                 personalBest: 'Best',
                 newPersonalBest: 'New Personal Best!',
                 retry: 'Retry',
+                reviveWithAd: 'Watch Ad to Revive',
                 // Mode selection
                 modeSelectTitle: 'Select Mode',
                 modeNormal: 'Normal',
@@ -645,17 +649,23 @@
         let adMob = null;
         let gameOverCount = 0;
         let adsRemoved = false;
-        const AD_SHOW_INTERVAL = 3;
+        let reviveUsed = false;
+        const AD_SHOW_INTERVAL = 5;
 
         // ★本番リリース時: IS_PRODUCTION を true に変更する
-        const IS_PRODUCTION = true;
+        const IS_PRODUCTION = false;
         // プラットフォーム別AdMob広告ユニットID
         const ADMOB_IDS = {
             ios:     IS_PRODUCTION ? 'ca-app-pub-4148293353679224/9166455565' : 'ca-app-pub-3940256099942544/1033173712',
             android: IS_PRODUCTION ? 'ca-app-pub-4148293353679224/ANDROID_AD_UNIT_ID' : 'ca-app-pub-3940256099942544/1033173712',
         };
+        const ADMOB_REWARDED_IDS = {
+            ios:     IS_PRODUCTION ? 'ca-app-pub-4148293353679224/REWARDED_IOS_ID' : 'ca-app-pub-3940256099942544/5224354917',
+            android: IS_PRODUCTION ? 'ca-app-pub-4148293353679224/REWARDED_ANDROID_ID' : 'ca-app-pub-3940256099942544/5224354917',
+        };
         const currentPlatform = (typeof Capacitor !== 'undefined') ? Capacitor.getPlatform() : 'web';
         const ADMOB_INTERSTITIAL_ID = ADMOB_IDS[currentPlatform] || ADMOB_IDS.ios;
+        const ADMOB_REWARDED_ID = ADMOB_REWARDED_IDS[currentPlatform] || ADMOB_REWARDED_IDS.ios;
 
         // App Tracking Transparency (ATT) - iOS 14.5+ で必須
         async function requestTrackingPermission() {
@@ -700,6 +710,42 @@
             } catch(e) {
                 // 広告表示失敗
             }
+        }
+
+        async function showRewardedAd() {
+            if (!adMob || adsRemoved) return false;
+            try {
+                await adMob.prepareRewardVideoAd({
+                    adId: ADMOB_REWARDED_ID,
+                    isTesting: !IS_PRODUCTION
+                });
+                await adMob.showRewardVideoAd();
+                return true;
+            } catch(e) {
+                return false;
+            }
+        }
+
+        function revivePlayer() {
+            reviveUsed = true;
+            // 上部4行分の砂粒子を削除
+            const removeThreshold = 4 * cellDivisions;
+            sandParticles = sandParticles.filter(p => p.y >= removeThreshold);
+            cellOccupied = null;
+            // ゲーム状態を復帰
+            gameOverInProgress = false;
+            gameState = 'playing';
+            currentPiece = createPiece();
+            // ゲームオーバー用タイマーをクリア
+            gameOverTimers.forEach(t => clearTimeout(t));
+            gameOverTimers = [];
+            if (gameOverAnimRAF) { cancelAnimationFrame(gameOverAnimRAF); gameOverAnimRAF = null; }
+            // BGM再開・ゲームループ再開
+            stopAllBGM();
+            playBGM();
+            scoreDisplayElement.style.display = '';
+            pauseButtonElement.style.display = '';
+            gameLoop = requestAnimationFrame(update);
         }
 
         const firebaseConfig = {
@@ -2865,7 +2911,19 @@
             // 広告表示（N回に1回）
             await showInterstitial();
 
-            if (db) {
+            // 復活可能な場合はハイスコア判定をスキップし、復活選択画面を表示
+            const canRevive = adMob && !adsRemoved && !reviveUsed;
+            if (canRevive) {
+                highScoreCheckSkipped = true;
+                playGameOverBGMDelayed();
+                gameOverAnimStart = Date.now();
+                drawGameOverScreen();
+                gameOverTimers.push(setTimeout(() => {
+                    gameOverReady = true;
+                    if (gameState === 'gameOver') drawGameOverScreen();
+                }, 1000));
+            } else if (db) {
+                highScoreCheckSkipped = false;
                 await fetchHighScores();
 
                 if (score > 0 && (highScores.length < 20 || score > highScores[highScores.length - 1].score)) {
@@ -2885,6 +2943,7 @@
                     }, 1000));
                 }
             } else {
+                highScoreCheckSkipped = false;
                 playGameOverBGMDelayed();
                 gameOverAnimStart = Date.now();
                 drawGameOverScreen();
@@ -3220,7 +3279,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.759', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.762', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4721,7 +4780,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.759', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.762', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5072,6 +5131,9 @@
                 if (btnAlpha > 0) {
                     ctx.globalAlpha = btnAlpha;
                     const btns = getGameOverButtons(statY + stats.length * lineH + 20, W, cx);
+                    if (btns.revive) {
+                        drawSFCButton(btns.revive.x, btns.revive.y, btns.revive.w, btns.revive.h, t('reviveWithAd'), 'green', null, pressedButtonId === 'go_revive');
+                    }
                     drawSFCButton(btns.retry.x, btns.retry.y, btns.retry.w, btns.retry.h, t('retry'), 'red', null, pressedButtonId === 'go_retry');
                     drawSFCButton(btns.title.x, btns.title.y, btns.title.w, btns.title.h, t('returnToTitle'), 'blue', null, pressedButtonId === 'go_title');
                 }
@@ -5097,10 +5159,17 @@
             const btnW = Math.min(W * 0.55, 220);
             const btnH = 44;
             const gap = 14;
-            return {
-                retry: { x: cx - btnW / 2, y: topY, w: btnW, h: btnH },
-                title: { x: cx - btnW / 2, y: topY + btnH + gap, w: btnW, h: btnH },
-            };
+            const showRevive = adMob && !adsRemoved && !reviveUsed;
+            const buttons = {};
+            let y = topY;
+            if (showRevive) {
+                buttons.revive = { x: cx - btnW / 2, y: y, w: btnW, h: btnH };
+                y += btnH + gap;
+            }
+            buttons.retry = { x: cx - btnW / 2, y: y, w: btnW, h: btnH };
+            y += btnH + gap;
+            buttons.title = { x: cx - btnW / 2, y: y, w: btnW, h: btnH };
+            return buttons;
         }
 
         /**
@@ -5129,6 +5198,9 @@
             flashKeys = null;
             pendingClearedLines = 0;
             gameOverInProgress = false;
+            reviveUsed = false;
+            highScoreCheckSkipped = false;
+            pendingAfterScoreAction = null;
             gameOverTimers.forEach(t => clearTimeout(t));
             gameOverTimers = [];
             frameCount = 0;
@@ -5922,13 +5994,40 @@
                     const goBaseY = goWinY + goWinH * 0.12;
                     const goStatY = goBaseY + (rankPosition > 0 ? 125 : 110) + (isNewPersonalBest ? 25 : 0);
                     const goBtns = getGameOverButtons(goStatY + 4 * 32 + 20, goW, goCx);
-                    if (x >= goBtns.retry.x && x <= goBtns.retry.x + goBtns.retry.w &&
+                    if (goBtns.revive && x >= goBtns.revive.x && x <= goBtns.revive.x + goBtns.revive.w &&
+                        y >= goBtns.revive.y && y <= goBtns.revive.y + goBtns.revive.h) {
+                        // 広告を見て復活
+                        pressedButtonId = 'go_revive';
+                        drawGameOverScreen();
+                        pressedButtonTimer = setTimeout(async () => {
+                            pressedButtonId = null;
+                            const rewarded = await showRewardedAd();
+                            if (rewarded) {
+                                revivePlayer();
+                            } else {
+                                drawGameOverScreen();
+                            }
+                        }, 80);
+                    } else if (x >= goBtns.retry.x && x <= goBtns.retry.x + goBtns.retry.w &&
                         y >= goBtns.retry.y && y <= goBtns.retry.y + goBtns.retry.h) {
                         // リトライ: 押下フィードバック→遷移
                         pressedButtonId = 'go_retry';
                         drawGameOverScreen();
-                        pressedButtonTimer = setTimeout(() => {
+                        pressedButtonTimer = setTimeout(async () => {
                             pressedButtonId = null;
+                            if (highScoreCheckSkipped && db) {
+                                highScoreCheckSkipped = false;
+                                await fetchHighScores();
+                                if (score > 0 && (highScores.length < 20 || score > highScores[highScores.length - 1].score)) {
+                                    pendingAfterScoreAction = 'retry';
+                                    stopAllBGM();
+                                    gameOverTimers.push(setTimeout(() => { if (gameState === 'gameOver') playHighScoreBGM(); }, 1000));
+                                    playerNameInput.value = '';
+                                    nameInputModal.style.display = 'flex';
+                                    playerNameInput.focus();
+                                    return;
+                                }
+                            }
                             startScreenTransition(() => { stopAllBGM(); resetGame(); });
                         }, 80);
                     } else if (x >= goBtns.title.x && x <= goBtns.title.x + goBtns.title.w &&
@@ -5936,8 +6035,21 @@
                         // タイトルへ戻る: 押下フィードバック→遷移
                         pressedButtonId = 'go_title';
                         drawGameOverScreen();
-                        pressedButtonTimer = setTimeout(() => {
+                        pressedButtonTimer = setTimeout(async () => {
                             pressedButtonId = null;
+                            if (highScoreCheckSkipped && db) {
+                                highScoreCheckSkipped = false;
+                                await fetchHighScores();
+                                if (score > 0 && (highScores.length < 20 || score > highScores[highScores.length - 1].score)) {
+                                    pendingAfterScoreAction = 'title';
+                                    stopAllBGM();
+                                    gameOverTimers.push(setTimeout(() => { if (gameState === 'gameOver') playHighScoreBGM(); }, 1000));
+                                    playerNameInput.value = '';
+                                    nameInputModal.style.display = 'flex';
+                                    playerNameInput.focus();
+                                    return;
+                                }
+                            }
                             startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
                         }, 80);
                     }
@@ -6167,14 +6279,23 @@
                 }
                 nameInputModal.style.display = 'none';
                 stopAllBGM();
-                playGameOverBGM();
-                gameOverReady = false;
-                gameOverAnimStart = Date.now();
-                drawGameOverScreen();
-                gameOverTimers.push(setTimeout(() => {
-                    gameOverReady = true;
-                    if (gameState === 'gameOver') drawGameOverScreen();
-                }, 1000));
+
+                if (pendingAfterScoreAction === 'retry') {
+                    pendingAfterScoreAction = null;
+                    startScreenTransition(() => { stopAllBGM(); resetGame(); });
+                } else if (pendingAfterScoreAction === 'title') {
+                    pendingAfterScoreAction = null;
+                    startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
+                } else {
+                    playGameOverBGM();
+                    gameOverReady = false;
+                    gameOverAnimStart = Date.now();
+                    drawGameOverScreen();
+                    gameOverTimers.push(setTimeout(() => {
+                        gameOverReady = true;
+                        if (gameState === 'gameOver') drawGameOverScreen();
+                    }, 1000));
+                }
             }
 
             submitScoreButton.addEventListener('click', async () => {
