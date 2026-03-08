@@ -3220,7 +3220,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.756', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.757', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4721,7 +4721,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.756', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.757', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5470,30 +5470,31 @@
                                 currentPiece = null;
                                 isClearing = false;
                                 isSettling = false;
+                            } else {
+                                gameOver();
                                 return;
                             }
-                            gameOver();
-                            return;
-                        }
-                        isClearing = false;
-                        comboCount = 0;
-                        currentPiece = nextPiece;
-                        nextPiece = nextPiece2;
-                        nextPiece2 = createPiece();
-                        holdUsed = false;
-                        // スポーン直後の衝突チェック: 新ピースが配置不可ならゲームオーバー
-                        if (!canMove(0, 0)) {
-                            if (gameMode === 'mindful') {
-                                isMindfulResetting = true;
-                                mindfulResetFrame = 0;
-                                mindfulResetCount++;
-                                currentPiece = null;
-                                isClearing = false;
-                                isSettling = false;
-                                return;
+                        } else {
+                            isClearing = false;
+                            comboCount = 0;
+                            currentPiece = nextPiece;
+                            nextPiece = nextPiece2;
+                            nextPiece2 = createPiece();
+                            holdUsed = false;
+                            // スポーン直後の衝突チェック: 新ピースが配置不可ならゲームオーバー
+                            if (!canMove(0, 0)) {
+                                if (gameMode === 'mindful') {
+                                    isMindfulResetting = true;
+                                    mindfulResetFrame = 0;
+                                    mindfulResetCount++;
+                                    currentPiece = null;
+                                    isClearing = false;
+                                    isSettling = false;
+                                } else {
+                                    gameOver();
+                                    return;
+                                }
                             }
-                            gameOver();
-                            return;
                         }
                     }
                 }
