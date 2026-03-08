@@ -3220,7 +3220,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.757', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.758', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -3694,14 +3694,14 @@
                 return null;
             }
         }
-        function loadBGM()         { bgmAudio = createBGMAudio('soul-stage.mp3', true, 'BGM'); }
-        function loadSpaceBGM()    { spaceBgmAudio = createBGMAudio('soul-space.mp3', true, '宇宙BGM'); }
-        function loadGameOverBGM() { gameoverBgmAudio = createBGMAudio('soul-gameover.mp3', false, 'ゲームオーバーBGM'); }
-        function loadTitleBGM()    { titleBgmAudio = createBGMAudio('soul-title.mp3', true, 'タイトルBGM'); }
-        function loadHighScoreBGM(){ highScoreBgmAudio = createBGMAudio('soul-highscore.mp3', true, 'ハイスコアBGM'); }
-        function loadFeverBGM()    { feverBgmAudio = createBGMAudio('fever-bgm.mp3', true, 'フィーバーBGM'); }
+        function loadBGM()         { bgmAudio = createBGMAudio('audio/soul-stage.mp3', true, 'BGM'); }
+        function loadSpaceBGM()    { spaceBgmAudio = createBGMAudio('audio/soul-space.mp3', true, '宇宙BGM'); }
+        function loadGameOverBGM() { gameoverBgmAudio = createBGMAudio('audio/soul-gameover.mp3', false, 'ゲームオーバーBGM'); }
+        function loadTitleBGM()    { titleBgmAudio = createBGMAudio('audio/soul-title.mp3', true, 'タイトルBGM'); }
+        function loadHighScoreBGM(){ highScoreBgmAudio = createBGMAudio('audio/soul-highscore.mp3', true, 'ハイスコアBGM'); }
+        function loadFeverBGM()    { feverBgmAudio = createBGMAudio('audio/fever-bgm.mp3', true, 'フィーバーBGM'); }
         function loadFlashSound() {
-            fetch('flash.mp3')
+            fetch('audio/flash.mp3')
                 .then(res => res.arrayBuffer())
                 .then(buf => {
                     if (audioCtx) {
@@ -3775,7 +3775,7 @@
 
             // 専用BGMファイルがあればそちらを再生
             if (!mindfulBgmAudio) {
-                mindfulBgmAudio = createBGMAudio('soul-mindful.mp3', true, 'Mindful BGM');
+                mindfulBgmAudio = createBGMAudio('audio/soul-mindful.mp3', true, 'Mindful BGM');
             }
             if (mindfulBgmAudio) {
                 try {
@@ -4721,7 +4721,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.757', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.758', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
