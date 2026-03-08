@@ -360,6 +360,8 @@
         let gameOverReady = false;
         let gameOverInProgress = false;
         let gameOverTimers = [];
+        let highScoreCheckSkipped = false;
+        let pendingAfterScoreAction = null;
         let rankPosition = 0;
         // localStorageキーを tamashii_ プレフィックスに統一（旧キーからの移行も対応）
         let personalBest = JSON.parse(localStorage.getItem('tamashii_personalBest') || localStorage.getItem('personalBest') || '{"score":0,"maxCombo":0}');
@@ -2909,7 +2911,19 @@
             // 広告表示（N回に1回）
             await showInterstitial();
 
-            if (db) {
+            // 復活可能な場合はハイスコア判定をスキップし、復活選択画面を表示
+            const canRevive = adMob && !adsRemoved && !reviveUsed;
+            if (canRevive) {
+                highScoreCheckSkipped = true;
+                playGameOverBGMDelayed();
+                gameOverAnimStart = Date.now();
+                drawGameOverScreen();
+                gameOverTimers.push(setTimeout(() => {
+                    gameOverReady = true;
+                    if (gameState === 'gameOver') drawGameOverScreen();
+                }, 1000));
+            } else if (db) {
+                highScoreCheckSkipped = false;
                 await fetchHighScores();
 
                 if (score > 0 && (highScores.length < 20 || score > highScores[highScores.length - 1].score)) {
@@ -2929,6 +2943,7 @@
                     }, 1000));
                 }
             } else {
+                highScoreCheckSkipped = false;
                 playGameOverBGMDelayed();
                 gameOverAnimStart = Date.now();
                 drawGameOverScreen();
@@ -3264,7 +3279,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.760', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.761', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4765,7 +4780,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.760', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.761', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5184,6 +5199,8 @@
             pendingClearedLines = 0;
             gameOverInProgress = false;
             reviveUsed = false;
+            highScoreCheckSkipped = false;
+            pendingAfterScoreAction = null;
             gameOverTimers.forEach(t => clearTimeout(t));
             gameOverTimers = [];
             frameCount = 0;
@@ -5996,8 +6013,21 @@
                         // リトライ: 押下フィードバック→遷移
                         pressedButtonId = 'go_retry';
                         drawGameOverScreen();
-                        pressedButtonTimer = setTimeout(() => {
+                        pressedButtonTimer = setTimeout(async () => {
                             pressedButtonId = null;
+                            if (highScoreCheckSkipped && db) {
+                                highScoreCheckSkipped = false;
+                                await fetchHighScores();
+                                if (score > 0 && (highScores.length < 20 || score > highScores[highScores.length - 1].score)) {
+                                    pendingAfterScoreAction = 'retry';
+                                    stopAllBGM();
+                                    gameOverTimers.push(setTimeout(() => { if (gameState === 'gameOver') playHighScoreBGM(); }, 1000));
+                                    playerNameInput.value = '';
+                                    nameInputModal.style.display = 'flex';
+                                    playerNameInput.focus();
+                                    return;
+                                }
+                            }
                             startScreenTransition(() => { stopAllBGM(); resetGame(); });
                         }, 80);
                     } else if (x >= goBtns.title.x && x <= goBtns.title.x + goBtns.title.w &&
@@ -6005,8 +6035,21 @@
                         // タイトルへ戻る: 押下フィードバック→遷移
                         pressedButtonId = 'go_title';
                         drawGameOverScreen();
-                        pressedButtonTimer = setTimeout(() => {
+                        pressedButtonTimer = setTimeout(async () => {
                             pressedButtonId = null;
+                            if (highScoreCheckSkipped && db) {
+                                highScoreCheckSkipped = false;
+                                await fetchHighScores();
+                                if (score > 0 && (highScores.length < 20 || score > highScores[highScores.length - 1].score)) {
+                                    pendingAfterScoreAction = 'title';
+                                    stopAllBGM();
+                                    gameOverTimers.push(setTimeout(() => { if (gameState === 'gameOver') playHighScoreBGM(); }, 1000));
+                                    playerNameInput.value = '';
+                                    nameInputModal.style.display = 'flex';
+                                    playerNameInput.focus();
+                                    return;
+                                }
+                            }
                             startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
                         }, 80);
                     }
@@ -6236,14 +6279,23 @@
                 }
                 nameInputModal.style.display = 'none';
                 stopAllBGM();
-                playGameOverBGM();
-                gameOverReady = false;
-                gameOverAnimStart = Date.now();
-                drawGameOverScreen();
-                gameOverTimers.push(setTimeout(() => {
-                    gameOverReady = true;
-                    if (gameState === 'gameOver') drawGameOverScreen();
-                }, 1000));
+
+                if (pendingAfterScoreAction === 'retry') {
+                    pendingAfterScoreAction = null;
+                    startScreenTransition(() => { stopAllBGM(); resetGame(); });
+                } else if (pendingAfterScoreAction === 'title') {
+                    pendingAfterScoreAction = null;
+                    startScreenTransition(() => { gameState = 'title'; playTitleBGM(); drawTitleScreen(); });
+                } else {
+                    playGameOverBGM();
+                    gameOverReady = false;
+                    gameOverAnimStart = Date.now();
+                    drawGameOverScreen();
+                    gameOverTimers.push(setTimeout(() => {
+                        gameOverReady = true;
+                        if (gameState === 'gameOver') drawGameOverScreen();
+                    }, 1000));
+                }
             }
 
             submitScoreButton.addEventListener('click', async () => {
