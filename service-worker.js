@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tamashii-no-kyoumei-v3757';
+const CACHE_NAME = 'tamashii-no-kyoumei-v3758';
 const urlsToCache = [
   './',
   './index.html',
@@ -25,13 +25,14 @@ const urlsToCache = [
   './icon-192.png',
   './icon-512.png',
   './icon-1024.png',
-  './soul-stage.mp3',
-  './soul-gameover.mp3',
-  './soul-title.mp3',
-  './soul-highscore.mp3',
-  './soul-space.mp3',
-  './fever-bgm.mp3',
-  './flash.mp3'
+  './audio/soul-stage.mp3',
+  './audio/soul-gameover.mp3',
+  './audio/soul-title.mp3',
+  './audio/soul-highscore.mp3',
+  './audio/soul-space.mp3',
+  './audio/soul-mindful.mp3',
+  './audio/fever-bgm.mp3',
+  './audio/flash.mp3'
 ];
 
 // インストール時にキャッシュ（即座に有効化）
