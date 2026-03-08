@@ -4,7 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>魂の共鳴 ～私を信じて～</title>
-    
+    <script>
+    // Android端末からのアクセスをテストプレイ登録ページへリダイレクト
+    if (/Android/i.test(navigator.userAgent) && typeof Capacitor === 'undefined') {
+        window.location.href = 'https://nullpoworks.github.io/beta-test.html';
+    }
+    </script>
+
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com;
@@ -3279,7 +3285,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.762', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.763', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4780,7 +4786,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.762', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.763', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
