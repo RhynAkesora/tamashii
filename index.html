@@ -653,7 +653,7 @@
         const AD_SHOW_INTERVAL = 5;
 
         // ★本番リリース時: IS_PRODUCTION を true に変更する
-        const IS_PRODUCTION = true;
+        const IS_PRODUCTION = false;
         // プラットフォーム別AdMob広告ユニットID
         const ADMOB_IDS = {
             ios:     IS_PRODUCTION ? 'ca-app-pub-4148293353679224/9166455565' : 'ca-app-pub-3940256099942544/1033173712',
@@ -3279,7 +3279,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.761', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.762', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4780,7 +4780,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.761', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.762', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
