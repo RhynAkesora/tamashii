@@ -5,9 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>魂の共鳴 ～私を信じて～</title>
     <script>
-    // Android端末からのアクセスをテストプレイ登録ページへリダイレクト
+    // Android端末からのアクセス → テストプレイ同意画面を表示
     if (/Android/i.test(navigator.userAgent) && typeof Capacitor === 'undefined') {
-        window.location.href = 'https://nullpoworks.github.io/beta-test.html';
+        document.addEventListener('DOMContentLoaded', function() {
+            var overlay = document.createElement('div');
+            overlay.id = 'android-beta-overlay';
+            overlay.innerHTML = ''
+                + '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:999999;display:flex;align-items:center;justify-content:center;font-family:sans-serif;">'
+                + '<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px solid #e94560;border-radius:16px;padding:32px 24px;max-width:360px;width:90%;text-align:center;box-shadow:0 0 40px rgba(233,69,96,0.3);">'
+                + '<div style="font-size:28px;margin-bottom:8px;">🎮</div>'
+                + '<h2 style="color:#e94560;font-size:20px;margin:0 0 12px;">早期テストプレイのご案内</h2>'
+                + '<p style="color:#ccc;font-size:14px;line-height:1.7;margin:0 0 8px;">Android版アプリは現在<br><strong style="color:#fff;">Google Play クローズドテスト</strong><br>として公開準備中です。</p>'
+                + '<p style="color:#ccc;font-size:14px;line-height:1.7;margin:0 0 20px;">テスターとして登録いただくと<br>いち早くアプリをお試しいただけます。</p>'
+                + '<a href="https://nullpoworks.github.io/beta-test.html" style="display:block;background:linear-gradient(135deg,#e94560,#c23152);color:#fff;font-size:16px;font-weight:bold;padding:14px 24px;border-radius:10px;text-decoration:none;margin:0 0 12px;box-shadow:0 4px 15px rgba(233,69,96,0.4);">テストプレイに参加する</a>'
+                + '<p style="color:#666;font-size:11px;margin:0;">※ Google アカウントでの登録が必要です</p>'
+                + '</div></div>';
+            document.body.appendChild(overlay);
+        });
     }
     </script>
 
@@ -3285,7 +3299,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.763', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.764', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4786,7 +4800,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.763', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.764', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
