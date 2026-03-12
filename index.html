@@ -151,7 +151,7 @@
         }
         
         #nameInputModal {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
@@ -160,10 +160,12 @@
             z-index: 30;
             display: none;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
+            padding-top: 15vh;
             flex-direction: column;
             color: white;
             font-size: 18px;
+            box-sizing: border-box;
         }
         #nameInputModal div {
             background-color: #1a1a2e;
@@ -171,6 +173,8 @@
             border-radius: 10px;
             border: 2px solid #2c5aa0;
             text-align: center;
+            max-width: 360px;
+            width: 90%;
         }
         #nameInputModal input {
             font-size: 18px;
@@ -756,6 +760,27 @@
             gameOverInProgress = false;
             gameState = 'playing';
             currentPiece = createPiece();
+            nextPiece = createPiece();
+            nextPiece2 = createPiece();
+            holdUsed = false;
+            // 消去・フラッシュ・コンボ状態をリセット
+            isSettling = false;
+            isClearing = false;
+            isFlashing = false;
+            flashTimer = 0;
+            flashKeys = null;
+            comboCount = 0;
+            // ロック遅延リセット
+            lockDelayTimer = 0;
+            lockDelayMoveCount = 0;
+            // フィーバー・エフェクト状態リセット
+            isFever = false;
+            feverTimer = 0;
+            pendingAllClear = false;
+            shakeDuration = 0;
+            shakeIntensity = 0;
+            yogaGlowLevel = 0;
+            yogaGlowTimer = 0;
             // ゲームオーバー用タイマーをクリア
             gameOverTimers.forEach(t => clearTimeout(t));
             gameOverTimers = [];
@@ -2517,12 +2542,7 @@
                 // スワップ後のスポーン衝突チェック
                 if (!canMove(0, 0)) {
                     if (gameMode === 'mindful') {
-                        isMindfulResetting = true;
-                        mindfulResetFrame = 0;
-                        mindfulResetCount++;
-                        currentPiece = null;
-                        isClearing = false;
-                        isSettling = false;
+                        startMindfulReset();
                         return;
                     }
                     gameOver();
@@ -2539,12 +2559,7 @@
             // ホールド後のスポーン衝突チェック
             if (!canMove(0, 0)) {
                 if (gameMode === 'mindful') {
-                    isMindfulResetting = true;
-                    mindfulResetFrame = 0;
-                    mindfulResetCount++;
-                    currentPiece = null;
-                    isClearing = false;
-                    isSettling = false;
+                    startMindfulReset();
                     return;
                 }
                 gameOver();
@@ -3299,7 +3314,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.764', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.766', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4800,7 +4815,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.764', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.766', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5280,15 +5295,12 @@
         }
 
         /**
-         * メインゲームループ
+         * マインドフルモード: タイマー更新 + リセットアニメーション
+         * @returns {'sessionComplete'|'resetting'|'continue'}
          */
-        function update() {
-            if (gameState !== 'playing') return;
-
-            frameCount++;
-
-            // マインドフルモード: タイマー更新
-            if (gameMode === 'mindful' && !isMindfulResetting) {
+        function handleMindfulTimerAndReset() {
+            // タイマー更新（リセット中は停止）
+            if (!isMindfulResetting) {
                 const now = Date.now();
                 if (now - mindfulLastTimerUpdate >= 1000) {
                     mindfulTimeRemaining -= Math.floor((now - mindfulLastTimerUpdate) / 1000);
@@ -5300,12 +5312,12 @@
                         stopAllBGM();
                         stopMindfulAmbient();
                         drawSessionCompleteScreen();
-                        return;
+                        return 'sessionComplete';
                     }
                 }
             }
 
-            // マインドフルモード: 砂崩しリセットアニメーション
+            // 砂崩しリセットアニメーション
             if (isMindfulResetting) {
                 mindfulResetFrame++;
                 const progress = mindfulResetFrame / MINDFUL_RESET_DURATION;
@@ -5341,7 +5353,100 @@
                     holdPiece = null;
                     holdUsed = false;
                 }
-                // リセット中は描画処理まで飛ばす（ピース操作をスキップ）
+                return 'resetting';
+            }
+
+            return 'continue';
+        }
+
+        /**
+         * マインドフルモード: ライン消去時の報酬処理
+         */
+        function applyMindfulLineRewards(comboCount, clearedLines, floatX, floatY) {
+            if (comboCount > 1) {
+                showComboDisplay(comboCount, 0);
+                triggerScreenShake(comboCount * 1.5, 15);
+                addFloatingText(`${comboCount} COMBO`, floatX, floatY - 20, `hsl(${mindfulComboHue}, 70%, 70%)`);
+            }
+            addFloatingText(`${clearedLines} LINE${clearedLines > 1 ? 'S' : ''}`, floatX, floatY, '#80d8c0');
+            // コンボで色相シフト（穏やかな視覚フィードバック）
+            if (comboCount >= 2) {
+                mindfulComboHue = (mindfulComboHue + 30) % 360;
+            }
+            mindfulMaxCombo = Math.max(mindfulMaxCombo, comboCount);
+            mindfulTotalLines += clearedLines;
+        }
+
+        /**
+         * クラシックモード: ライン消去時の報酬処理
+         */
+        function applyClassicLineRewards(comboCount, clearedLines, floatX, floatY) {
+            const feverMultiplier = isFever ? 2 : 1;
+            const basePoints = clearedLines * 100 * feverMultiplier;
+
+            if (comboCount > 1) {
+                const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1)) * feverMultiplier;
+                score += comboBonus;
+                showComboDisplay(comboCount, comboBonus);
+                triggerScreenShake(comboCount * 1.5, 15);
+                addFloatingText(`+${comboBonus} COMBO${isFever ? ' x2' : ''}`, floatX, floatY - 20, isFever ? COLOR_FEVER : '#ff6699');
+            }
+            score += basePoints;
+            addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? COLOR_FEVER : COLOR_GOLD);
+
+            // フィーバー発動・延長
+            if (comboCount >= FEVER_COMBO_THRESHOLD && !isFever) {
+                isFever = true;
+                feverTimer = FEVER_DURATION;
+                playFeverBGM();
+                addFloatingText('FEVER!', floatX, floatY - 50, COLOR_FEVER);
+                triggerScreenShake(5, 20);
+            } else if (isFever) {
+                const ext = clearedLines * FEVER_LINE_BONUS;
+                feverTimer = Math.min(feverTimer + ext, FEVER_MAX);
+                const addSec = Math.round(ext / 60);
+                addFloatingText(`FEVER +${addSec}s`, floatX, floatY - 50, COLOR_FEVER);
+            }
+        }
+
+        /**
+         * マインドフルモード: リセット中のオーバーレイ描画
+         */
+        function drawMindfulResetOverlay() {
+            const gameAreaWidth = cellSize * gridWidth;
+            const gameAreaH = gameGridHeight || canvas.height;
+            const progress = mindfulResetFrame / MINDFUL_RESET_DURATION;
+            // 穏やかな青いオーバーレイが徐々に濃くなって薄くなる
+            const alpha = Math.sin(progress * Math.PI) * 0.15;
+            ctx.fillStyle = `rgba(100, 200, 220, ${alpha})`;
+            ctx.fillRect(0, 0, gameAreaWidth, gameAreaH);
+        }
+
+        /**
+         * マインドフルモード: リセットアニメーション開始
+         */
+        function startMindfulReset() {
+            isMindfulResetting = true;
+            mindfulResetFrame = 0;
+            mindfulResetCount++;
+            currentPiece = null;
+            isClearing = false;
+            isSettling = false;
+        }
+
+        /**
+         * メインゲームループ
+         */
+        function update() {
+            if (gameState !== 'playing') return;
+
+            frameCount++;
+
+            // マインドフルモード: タイマー更新 + リセットアニメーション
+            if (gameMode === 'mindful') {
+                const mindfulState = handleMindfulTimerAndReset();
+                if (mindfulState === 'sessionComplete') return;
+                // 'resetting' の場合、!isMindfulResetting ガードでゲームロジックをスキップ
             }
 
             if (!isMindfulResetting) {
@@ -5389,50 +5494,14 @@
                     maxCombo = Math.max(maxCombo, comboCount);
                     playClearSound(comboCount);
 
-                    const feverMultiplier = isFever ? 2 : 1;
-                    const basePoints = clearedLines * 100 * feverMultiplier;
                     const floatX = cellSize * gridWidth / 2;
                     const floatY = cellSize * 3;
 
-                    if (comboCount > 1) {
-                        const comboBonus = Math.floor(100 * Math.pow(1.5, comboCount - 1)) * feverMultiplier;
-                        if (gameMode !== 'mindful') score += comboBonus;
-                        showComboDisplay(comboCount, gameMode === 'mindful' ? 0 : comboBonus);
-                        triggerScreenShake(comboCount * 1.5, 15);
-                        if (gameMode === 'mindful') {
-                            addFloatingText(`${comboCount} COMBO`, floatX, floatY - 20, `hsl(${mindfulComboHue}, 70%, 70%)`);
-                        } else {
-                            addFloatingText(`+${comboBonus} COMBO${isFever ? ' x2' : ''}`, floatX, floatY - 20, isFever ? COLOR_FEVER : '#ff6699');
-                        }
-                    }
-                    if (gameMode !== 'mindful') {
-                        score += basePoints;
-                        addFloatingText(`+${basePoints}${isFever ? ' x2' : ''}`, floatX, floatY, isFever ? COLOR_FEVER : COLOR_GOLD);
-                    } else {
-                        addFloatingText(`${clearedLines} LINE${clearedLines > 1 ? 'S' : ''}`, floatX, floatY, '#80d8c0');
-                    }
-
-                    // フィーバー発動・延長（マインドフルモードでは無効→穏やかな色変化に置換）
+                    // モード別の報酬処理
                     if (gameMode === 'mindful') {
-                        // コンボで色相シフト（穏やかな視覚フィードバック）
-                        if (comboCount >= 2) {
-                            mindfulComboHue = (mindfulComboHue + 30) % 360;
-                        }
-                        mindfulMaxCombo = Math.max(mindfulMaxCombo, comboCount);
-                        mindfulTotalLines += clearedLines;
-                    } else if (comboCount >= FEVER_COMBO_THRESHOLD && !isFever) {
-                        // 新規発動: ベース20秒
-                        isFever = true;
-                        feverTimer = FEVER_DURATION;
-                        playFeverBGM();
-                        addFloatingText('FEVER!', floatX, floatY - 50, COLOR_FEVER);
-                        triggerScreenShake(5, 20);
-                    } else if (isFever) {
-                        // フィーバー中は全てのライン消去でタイマー延長（コンボ数不問）
-                        const ext = clearedLines * FEVER_LINE_BONUS;
-                        feverTimer = Math.min(feverTimer + ext, FEVER_MAX);
-                        const addSec = Math.round(ext / 60);
-                        addFloatingText(`FEVER +${addSec}s`, floatX, floatY - 50, COLOR_FEVER);
+                        applyMindfulLineRewards(comboCount, clearedLines, floatX, floatY);
+                    } else {
+                        applyClassicLineRewards(comboCount, clearedLines, floatX, floatY);
                     }
 
                     // ヨガ行者エフェクト更新
@@ -5555,13 +5624,7 @@
                         }
                         if (topRowBlocked) {
                             if (gameMode === 'mindful') {
-                                // マインドフルモード: 砂崩しリセット開始
-                                isMindfulResetting = true;
-                                mindfulResetFrame = 0;
-                                mindfulResetCount++;
-                                currentPiece = null;
-                                isClearing = false;
-                                isSettling = false;
+                                startMindfulReset();
                             } else {
                                 gameOver();
                                 return;
@@ -5576,12 +5639,7 @@
                             // スポーン直後の衝突チェック: 新ピースが配置不可ならゲームオーバー
                             if (!canMove(0, 0)) {
                                 if (gameMode === 'mindful') {
-                                    isMindfulResetting = true;
-                                    mindfulResetFrame = 0;
-                                    mindfulResetCount++;
-                                    currentPiece = null;
-                                    isClearing = false;
-                                    isSettling = false;
+                                    startMindfulReset();
                                 } else {
                                     gameOver();
                                     return;
@@ -5776,15 +5834,7 @@
             }
 
             // マインドフルモード: リセットアニメーション中のオーバーレイ演出
-            if (isMindfulResetting) {
-                const gameAreaWidth = cellSize * gridWidth;
-                const gameAreaH = gameGridHeight || canvas.height;
-                const progress = mindfulResetFrame / MINDFUL_RESET_DURATION;
-                // 穏やかな青いオーバーレイが徐々に濃くなって薄くなる
-                const alpha = Math.sin(progress * Math.PI) * 0.15;
-                ctx.fillStyle = `rgba(100, 200, 220, ${alpha})`;
-                ctx.fillRect(0, 0, gameAreaWidth, gameAreaH);
-            }
+            if (isMindfulResetting) drawMindfulResetOverlay();
 
             ctx.restore();
 
