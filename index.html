@@ -151,7 +151,7 @@
         }
         
         #nameInputModal {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
@@ -160,10 +160,12 @@
             z-index: 30;
             display: none;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
+            padding-top: 15vh;
             flex-direction: column;
             color: white;
             font-size: 18px;
+            box-sizing: border-box;
         }
         #nameInputModal div {
             background-color: #1a1a2e;
@@ -171,6 +173,8 @@
             border-radius: 10px;
             border: 2px solid #2c5aa0;
             text-align: center;
+            max-width: 360px;
+            width: 90%;
         }
         #nameInputModal input {
             font-size: 18px;
@@ -756,6 +760,27 @@
             gameOverInProgress = false;
             gameState = 'playing';
             currentPiece = createPiece();
+            nextPiece = createPiece();
+            nextPiece2 = createPiece();
+            holdUsed = false;
+            // 消去・フラッシュ・コンボ状態をリセット
+            isSettling = false;
+            isClearing = false;
+            isFlashing = false;
+            flashTimer = 0;
+            flashKeys = null;
+            comboCount = 0;
+            // ロック遅延リセット
+            lockDelayTimer = 0;
+            lockDelayMoveCount = 0;
+            // フィーバー・エフェクト状態リセット
+            isFever = false;
+            feverTimer = 0;
+            pendingAllClear = false;
+            shakeDuration = 0;
+            shakeIntensity = 0;
+            yogaGlowLevel = 0;
+            yogaGlowTimer = 0;
             // ゲームオーバー用タイマーをクリア
             gameOverTimers.forEach(t => clearTimeout(t));
             gameOverTimers = [];
@@ -3289,7 +3314,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.765', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.766', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4790,7 +4815,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.765', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.766', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
