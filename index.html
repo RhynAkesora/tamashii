@@ -674,7 +674,7 @@
         let gameOverCount = 0;
         let adsRemoved = false;
         let reviveUsed = false;
-        const AD_SHOW_INTERVAL = 5;
+        const AD_SHOW_INTERVAL = 3;
 
         // ★本番リリース時: IS_PRODUCTION を true に変更する
         const IS_PRODUCTION = false;
@@ -3330,7 +3330,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.768', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.769', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4831,7 +4831,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.768', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.769', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
