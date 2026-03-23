@@ -685,7 +685,7 @@
         };
         const ADMOB_REWARDED_IDS = {
             ios:     IS_PRODUCTION ? 'ca-app-pub-4148293353679224/REWARDED_IOS_ID' : 'ca-app-pub-3940256099942544/5224354917',
-            android: IS_PRODUCTION ? 'ca-app-pub-4148293353679224/REWARDED_ANDROID_ID' : 'ca-app-pub-3940256099942544/5224354917',
+            android: IS_PRODUCTION ? 'ca-app-pub-4148293353679224/3728355654' : 'ca-app-pub-3940256099942544/5224354917',
         };
         const currentPlatform = (typeof Capacitor !== 'undefined') ? Capacitor.getPlatform() : 'web';
         const ADMOB_INTERSTITIAL_ID = ADMOB_IDS[currentPlatform] || ADMOB_IDS.ios;
@@ -3330,7 +3330,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.767', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.768', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4831,7 +4831,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.767', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.768', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
