@@ -681,7 +681,7 @@
         // プラットフォーム別AdMob広告ユニットID
         const ADMOB_IDS = {
             ios:     IS_PRODUCTION ? 'ca-app-pub-4148293353679224/9166455565' : 'ca-app-pub-3940256099942544/1033173712',
-            android: IS_PRODUCTION ? 'ca-app-pub-4148293353679224/ANDROID_AD_UNIT_ID' : 'ca-app-pub-3940256099942544/1033173712',
+            android: IS_PRODUCTION ? 'ca-app-pub-4148293353679224/9166455565' : 'ca-app-pub-3940256099942544/1033173712',
         };
         const ADMOB_REWARDED_IDS = {
             ios:     IS_PRODUCTION ? 'ca-app-pub-4148293353679224/REWARDED_IOS_ID' : 'ca-app-pub-3940256099942544/5224354917',
@@ -1547,10 +1547,17 @@
         /**
          * ステージ背景をオフスクリーンcanvasにキャッシュ描画する
          */
+        // オフスクリーンcanvasを再利用（GPUメモリリーク防止）
+        let _stageBgOffscreen = null;
+        let _stageBgOffscreenCtx = null;
         function buildStageBgCache(w, h, themeIndex) {
-            const oc = document.createElement('canvas');
+            if (!_stageBgOffscreen) {
+                _stageBgOffscreen = document.createElement('canvas');
+                _stageBgOffscreenCtx = _stageBgOffscreen.getContext('2d');
+            }
+            const oc = _stageBgOffscreen;
             oc.width = w; oc.height = h;
-            const g = oc.getContext('2d');
+            const g = _stageBgOffscreenCtx;
 
             if (themeIndex === 0) {
                 // Lv1-3: 昼の砂漠 — 砂丘シルエット + 陽炎
@@ -1818,6 +1825,8 @@
         /**
          * SFC風立体ブロックを1個描画する（元に戻す場合はこの関数を削除し呼び出しをfillRectに戻す）
          */
+        // drawBlock3D用グラデーションキャッシュ（sizeごと）
+        const jewGradCache = new Map();
         function drawBlock3D(px, py, size, color) {
             const s = size - 1;
             // ベース色
@@ -1831,15 +1840,22 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
             ctx.fillRect(px, py + s - 2, s, 2);  // 下辺
             ctx.fillRect(px + s - 2, py, 2, s);  // 右辺
-            // 宝石風ハイライト（中央上寄りに光沢）
-            const jewGrad = ctx.createRadialGradient(
-                px + s * 0.35, py + s * 0.3, 0,
-                px + s * 0.35, py + s * 0.3, s * 0.45
-            );
-            jewGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
-            jewGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            // 宝石風ハイライト（キャッシュ済みグラデーション使用）
+            let jewGrad = jewGradCache.get(s);
+            if (!jewGrad) {
+                jewGrad = ctx.createRadialGradient(
+                    s * 0.35, s * 0.3, 0,
+                    s * 0.35, s * 0.3, s * 0.45
+                );
+                jewGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+                jewGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                jewGradCache.set(s, jewGrad);
+            }
+            ctx.save();
+            ctx.translate(px, py);
             ctx.fillStyle = jewGrad;
-            ctx.fillRect(px + 2, py + 2, s - 4, s - 4);
+            ctx.fillRect(2, 2, s - 4, s - 4);
+            ctx.restore();
         }
 
         /**
@@ -3314,7 +3330,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.766', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.767', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4815,7 +4831,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.766', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.767', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5724,6 +5740,7 @@
             updateAndDrawFloatingTexts();
 
             // フィーバー演出（マインドフルモードでは無効）
+            // オーバーレイ用キャッシュ（ゲームエリアサイズ変更時のみ再生成）
             if (isFever && gameMode !== 'mindful') {
                 const gameAreaWidth = cellSize * gridWidth;
                 const gameAreaH = gameGridHeight || canvas.height;
@@ -5736,17 +5753,22 @@
                 ctx.rect(0, 0, gameAreaWidth, gameAreaH);
                 ctx.clip();
 
-                // 全体的なマゼンタ/紫のオーバーレイ（脈動）
-                const overlayAlpha = 0.04 + pulse * 0.04;
-                const overlayGrad = ctx.createRadialGradient(
-                    gameAreaWidth / 2, gameAreaH / 2, 0,
-                    gameAreaWidth / 2, gameAreaH / 2, gameAreaWidth * 0.8
-                );
-                overlayGrad.addColorStop(0, `rgba(255, 0, 255, ${overlayAlpha * 1.5})`);
-                overlayGrad.addColorStop(0.5, `rgba(180, 0, 255, ${overlayAlpha})`);
-                overlayGrad.addColorStop(1, `rgba(100, 0, 180, ${overlayAlpha * 0.5})`);
-                ctx.fillStyle = overlayGrad;
+                // 全体的なマゼンタ/紫のオーバーレイ（キャッシュ済みグラデーション + globalAlphaで脈動）
+                const foverKey = gameAreaWidth + ',' + gameAreaH;
+                if (drawGameFrame._feverOverlayKey !== foverKey) {
+                    drawGameFrame._feverOverlay = ctx.createRadialGradient(
+                        gameAreaWidth / 2, gameAreaH / 2, 0,
+                        gameAreaWidth / 2, gameAreaH / 2, gameAreaWidth * 0.8
+                    );
+                    drawGameFrame._feverOverlay.addColorStop(0, 'rgba(255, 0, 255, 0.12)');
+                    drawGameFrame._feverOverlay.addColorStop(0.5, 'rgba(180, 0, 255, 0.08)');
+                    drawGameFrame._feverOverlay.addColorStop(1, 'rgba(100, 0, 180, 0.04)');
+                    drawGameFrame._feverOverlayKey = foverKey;
+                }
+                ctx.globalAlpha = 0.5 + pulse * 0.5;
+                ctx.fillStyle = drawGameFrame._feverOverlay;
                 ctx.fillRect(0, 0, gameAreaWidth, gameAreaH);
+                ctx.globalAlpha = 1.0;
 
                 // 上下から流れるライトビーム（2本ずつ、位置がゆっくり移動）
                 for (let i = 0; i < 4; i++) {
@@ -5767,20 +5789,20 @@
                     ctx.fillRect(xBase - beamW / 2, 0, beamW, gameAreaH);
                 }
 
-                // 浮遊するエネルギーパーティクル（軽量: 8個の光点）
+                // 浮遊するエネルギーパーティクル（軽量: arc + 単色fill）
                 for (let i = 0; i < 8; i++) {
                     const t = frameCount * 0.008 + i * 1.3;
                     const px = (Math.sin(t * 1.1 + i * 2.1) * 0.4 + 0.5) * gameAreaWidth;
                     const py = ((t * 0.3 + i * 0.35) % 1.0) * gameAreaH;
                     const r = 2 + Math.sin(frameCount * 0.1 + i) * 1.5;
                     const pAlpha = 0.15 + Math.sin(frameCount * 0.12 + i * 0.8) * 0.1;
-                    const pGrad = ctx.createRadialGradient(px, py, 0, px, py, r * 4);
-                    pGrad.addColorStop(0, `rgba(255, 180, 255, ${pAlpha})`);
-                    pGrad.addColorStop(0.5, `rgba(255, 100, 255, ${pAlpha * 0.4})`);
-                    pGrad.addColorStop(1, 'rgba(255, 0, 255, 0)');
-                    ctx.fillStyle = pGrad;
-                    ctx.fillRect(px - r * 4, py - r * 4, r * 8, r * 8);
+                    ctx.globalAlpha = pAlpha;
+                    ctx.fillStyle = 'rgba(255, 180, 255, 1)';
+                    ctx.beginPath();
+                    ctx.arc(px, py, r * 2, 0, Math.PI * 2);
+                    ctx.fill();
                 }
+                ctx.globalAlpha = 1.0;
 
                 ctx.restore();
 
