@@ -3330,7 +3330,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.771', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.772', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4831,7 +4831,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.771', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.772', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5755,23 +5755,23 @@
 
                 // 全体的なマゼンタ/紫のオーバーレイ（キャッシュ済みグラデーション + globalAlphaで脈動）
                 const foverKey = gameAreaWidth + ',' + gameAreaH;
-                if (drawGameFrame._feverOverlayKey !== foverKey) {
-                    drawGameFrame._feverOverlay = ctx.createRadialGradient(
+                if (update._feverOverlayKey !== foverKey) {
+                    update._feverOverlay = ctx.createRadialGradient(
                         gameAreaWidth / 2, gameAreaH / 2, 0,
                         gameAreaWidth / 2, gameAreaH / 2, gameAreaWidth * 0.8
                     );
-                    drawGameFrame._feverOverlay.addColorStop(0, 'rgba(255, 0, 255, 0.12)');
-                    drawGameFrame._feverOverlay.addColorStop(0.5, 'rgba(180, 0, 255, 0.08)');
-                    drawGameFrame._feverOverlay.addColorStop(1, 'rgba(100, 0, 180, 0.04)');
-                    drawGameFrame._feverOverlayKey = foverKey;
+                    update._feverOverlay.addColorStop(0, 'rgba(255, 0, 255, 0.12)');
+                    update._feverOverlay.addColorStop(0.5, 'rgba(180, 0, 255, 0.08)');
+                    update._feverOverlay.addColorStop(1, 'rgba(100, 0, 180, 0.04)');
+                    update._feverOverlayKey = foverKey;
                 }
                 ctx.globalAlpha = 0.5 + pulse * 0.5;
-                ctx.fillStyle = drawGameFrame._feverOverlay;
+                ctx.fillStyle = update._feverOverlay;
                 ctx.fillRect(0, 0, gameAreaWidth, gameAreaH);
                 ctx.globalAlpha = 1.0;
 
-                // 上下から流れるライトビーム（2本ずつ、位置がゆっくり移動）
-                for (let i = 0; i < 4; i++) {
+                // 上下から流れるライトビーム（軽量版: 2本）
+                for (let i = 0; i < 2; i++) {
                     const speed = 0.02 + i * 0.007;
                     const xBase = ((frameCount * speed + i * 80) % (gameAreaWidth + 60)) - 30;
                     const beamW = 15 + Math.sin(frameCount * 0.05 + i) * 8;
@@ -5829,21 +5829,13 @@
 
                 // 外側グロー（大きいぼかし）
                 ctx.shadowColor = 'rgba(255, 0, 255, 0.8)';
-                ctx.shadowBlur = 20 + fastPulse * 10;
+                ctx.shadowBlur = 8;
                 ctx.shadowOffsetX = 0;
                 ctx.shadowOffsetY = 0;
 
-                // ゴールド→マゼンタのグラデーション塗り
-                const textGrad = ctx.createLinearGradient(
-                    textX - fontSize * 2, textY - fontSize / 2,
-                    textX + fontSize * 2, textY + fontSize / 2
-                );
-                const gradShift = (frameCount * 0.01) % 1;
-                textGrad.addColorStop(0, `hsl(${(320 + gradShift * 60) % 360}, 100%, 75%)`);
-                textGrad.addColorStop(0.3, `hsl(${(45 + gradShift * 30) % 360}, 100%, 70%)`);
-                textGrad.addColorStop(0.6, `hsl(${(300 + gradShift * 60) % 360}, 100%, 75%)`);
-                textGrad.addColorStop(1, `hsl(${(40 + gradShift * 30) % 360}, 100%, 70%)`);
-                ctx.fillStyle = textGrad;
+                // マゼンタ→ゴールドのアニメーション色（軽量: 単色hsla）
+                const hueShift = (frameCount * 0.6) % 360;
+                ctx.fillStyle = `hsl(${(320 + hueShift) % 360}, 100%, 75%)`;
                 ctx.fillText(feverText, textX, textY);
 
                 // テキストアウトライン（白+ゴールド）
