@@ -717,9 +717,13 @@
                 adMob = AdMob;
                 await adMob.initialize({ initializeForTesting: !IS_PRODUCTION });
             } catch(e) {
-                // AdMob未対応環境（ブラウザ等）
+                // AdMob未対応環境（ブラウザ等）— 復活機能は広告なしで提供
+                adMob = null;
             }
         }
+
+        // Capacitor環境かどうか（復活ボタン表示判定用）
+        const isNativeApp = typeof Capacitor !== 'undefined' && Capacitor.getPlatform() !== 'web';
 
         async function showInterstitial() {
             if (!adMob || adsRemoved) return;
@@ -737,7 +741,8 @@
         }
 
         async function showRewardedAd() {
-            if (!adMob || adsRemoved) return false;
+            if (adsRemoved) return true; // 広告除去済みなら無条件で復活
+            if (!adMob) return true; // AdMob未初期化でも復活を許可（広告なし）
             try {
                 await adMob.prepareRewardVideoAd({
                     adId: ADMOB_REWARDED_ID,
@@ -746,7 +751,8 @@
                 await adMob.showRewardVideoAd();
                 return true;
             } catch(e) {
-                return false;
+                // 広告の読み込み/表示に失敗しても復活を許可
+                return true;
             }
         }
 
@@ -2963,7 +2969,7 @@
             await showInterstitial();
 
             // 復活可能な場合はハイスコア判定をスキップし、復活選択画面を表示
-            const canRevive = adMob && !adsRemoved && !reviveUsed;
+            const canRevive = (adMob || isNativeApp) && !adsRemoved && !reviveUsed;
             if (canRevive) {
                 highScoreCheckSkipped = true;
                 playGameOverBGMDelayed();
@@ -3330,7 +3336,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.772', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.773', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4831,7 +4837,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.772', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.773', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
@@ -5210,7 +5216,7 @@
             const btnW = Math.min(W * 0.55, 220);
             const btnH = 44;
             const gap = 14;
-            const showRevive = adMob && !adsRemoved && !reviveUsed;
+            const showRevive = (adMob || isNativeApp) && !adsRemoved && !reviveUsed;
             const buttons = {};
             let y = topY;
             if (showRevive) {
