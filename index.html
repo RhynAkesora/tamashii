@@ -758,8 +758,8 @@
 
         function revivePlayer() {
             reviveUsed = true;
-            // 上部4行分の砂粒子を削除
-            const removeThreshold = 4 * cellDivisions;
+            // 上部8行分の砂粒子を削除（満タン比約60%まで軽減）
+            const removeThreshold = 8 * cellDivisions;
             sandParticles = sandParticles.filter(p => p.y >= removeThreshold);
             cellOccupied = null;
             // ゲーム状態を復帰
@@ -3336,7 +3336,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.773', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.774', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4837,7 +4837,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.773', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.774', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
