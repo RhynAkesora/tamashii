@@ -791,13 +791,17 @@
             gameOverTimers.forEach(t => clearTimeout(t));
             gameOverTimers = [];
             if (gameOverAnimRAF) { cancelAnimationFrame(gameOverAnimRAF); gameOverAnimRAF = null; }
-            // BGM再開・ゲームループ再開
+            // BGM再開・カウントダウン経由でゲーム再開
             stopAllBGM();
             playBGM();
             scoreDisplayElement.style.display = 'flex';
             pauseButtonElement.style.display = 'block';
             resizeCanvas();
-            gameLoop = requestAnimationFrame(update);
+            // カウントダウン画面を経由して再開（ポーズ復帰と同じ流れ）
+            gameState = 'startScreen';
+            countdownLastNumber = -1;
+            startScreenTime = Date.now();
+            drawStartScreen();
         }
 
         const firebaseConfig = {
@@ -3337,7 +3341,7 @@
             ctx.font = `${versionFontSize}px Arial`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.textAlign = 'right';
-            ctx.fillText('Ver. 3.775', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
+            ctx.fillText('Ver. 3.776', W - Math.max(30, W * 0.03), H - Math.max(30, H * 0.04));
         }
 
         /**
@@ -4838,7 +4842,7 @@
             ctx.fillStyle = 'rgba(200, 180, 150, 0.4)';
             ctx.font = '14px Arial';
             ctx.fillText('\u00A92026 NullPo Works / Veriquest', cx, winBottom - 14);
-            ctx.fillText('Ver. 3.775', cx, winBottom - 32);
+            ctx.fillText('Ver. 3.776', cx, winBottom - 32);
 
             ctx.textBaseline = 'alphabetic';
         }
